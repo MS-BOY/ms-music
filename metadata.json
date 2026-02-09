@@ -1,0 +1,8 @@
+{
+  "name": "MS Music",
+  "description": "An ultra-modern, cinematic music and group chat application featuring glassmorphism, 3D transitions, and real-time social interaction.",
+  "requestFramePermissions": [
+    "camera",
+    "microphone"
+  ]
+}
