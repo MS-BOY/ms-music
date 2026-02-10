@@ -1,118 +1,142 @@
 <!DOCTYPE html>
 <html lang="en">
-  <head>
-    <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
-    <title>MS Music</title>
-    <script src="https://cdn.tailwindcss.com"></script>
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <title>MS Music</title>
 
-    <!-- Fonts -->
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Outfit:wght@300;400;600;700;800&display=swap" rel="stylesheet">
+  <!-- Tailwind CSS -->
+  <script src="https://cdn.tailwindcss.com"></script>
 
-    <style>
-      /* --- Root & Body Reset --- */
-      :root {
-        --ease-out-expo: cubic-bezier(0.16, 1, 0.3, 1);
-        --ease-in-out-circ: cubic-bezier(0.85, 0, 0.15, 1);
-      }
+  <!-- Fonts -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Outfit:wght@300;400;600;700;800&display=swap" rel="stylesheet">
 
-      html, body {
-        margin: 0;
-        padding: 0;
-        width: 100%;
-        height: 100%;
-        background-color: #020202;
-        font-family: 'Inter', sans-serif;
-        color: white;
-        overflow: hidden; /* Prevent scroll */
-        -webkit-font-smoothing: antialiased;
-        -moz-osx-font-smoothing: grayscale;
-        perspective: 1200px;
-      }
-
-      h1, h2, h3, .font-outfit {
-        font-family: 'Outfit', sans-serif;
-      }
-
-      /* --- Glassmorphism --- */
-      .glass {
-        background: rgba(255, 255, 255, 0.03);
-        backdrop-filter: blur(25px) saturate(160%);
-        -webkit-backdrop-filter: blur(25px) saturate(160%);
-        border: 1px solid rgba(255, 255, 255, 0.08);
-        box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.6);
-        transform: translateZ(0);
-        will-change: transform, opacity;
-      }
-
-      .glass-high {
-        background: rgba(255, 255, 255, 0.07);
-        backdrop-filter: blur(50px) saturate(220%);
-        -webkit-backdrop-filter: blur(50px) saturate(220%);
-        border: 1px solid rgba(255, 255, 255, 0.15);
-        transform: translateZ(0);
-        will-change: transform, opacity;
-      }
-
-      .text-glow {
-        text-shadow: 0 0 15px rgba(255, 255, 255, 0.4), 0 0 30px rgba(59, 130, 246, 0.3);
-      }
-
-      /* --- Hide Scrollbars --- */
-      .no-scrollbar::-webkit-scrollbar { display: none; }
-      .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
-
-      * {
-        -webkit-tap-highlight-color: transparent;
-        user-select: none;
-        box-sizing: border-box;
-      }
-
-      input, textarea { user-select: text; }
-
-      .will-change-transform { will-change: transform; transform: translateZ(0); }
-      .perspective-1200 { perspective: 1200px; }
-      .transform-style-3d { transform-style: preserve-3d; }
-
-      .vinyl-shine {
-        background: radial-gradient(circle at 50% 50%, transparent 40%, rgba(255,255,255,0.05) 45%, transparent 50%);
-        background-size: 200% 200%;
-      }
-
-      .scroll-smooth { scroll-behavior: smooth; }
-
-      /* --- Fit all screens --- */
-      #root {
-        width: 100%;
-        height: 100%;
-      }
-    </style>
-
-    <!-- Import maps for ESM modules -->
-    <script type="importmap">
-    {
-      "imports": {
-        "react": "https://esm.sh/react@18.2.0",
-        "react/": "https://esm.sh/react@18.2.0/",
-        "react-dom": "https://esm.sh/react-dom@18.2.0",
-        "react-dom/": "https://esm.sh/react-dom@18.2.0/",
-        "react-dom/client": "https://esm.sh/react-dom@18.2.0/client",
-        "lucide-react": "https://esm.sh/lucide-react@0.344.0?external=react",
-        "framer-motion": "https://esm.sh/framer-motion@11.0.8?external=react,react-dom",
-        "firebase/app": "https://esm.sh/firebase@10.8.0/app",
-        "firebase/auth": "https://esm.sh/firebase@10.8.0/auth",
-        "firebase/firestore": "https://esm.sh/firebase@10.8.0/firestore",
-        "firebase/storage": "https://esm.sh/firebase@10.8.0/storage",
-        "firebase/": "https://esm.sh/firebase@^12.9.0/"
-      }
+  <style>
+    /* --- Root & Body Reset --- */
+    :root {
+      --ease-out-expo: cubic-bezier(0.16, 1, 0.3, 1);
+      --ease-in-out-circ: cubic-bezier(0.85, 0, 0.15, 1);
     }
-    </script>
-  </head>
 
-  <body class="w-screen h-screen overflow-hidden">
-    <div id="root"></div>
-    <script type="module" src="/index.tsx"></script>
-  </body>
+    html, body {
+      margin: 0;
+      padding: 0;
+      width: 100%;
+      height: 100%;
+      background-color: #020202;
+      font-family: 'Inter', sans-serif;
+      color: white;
+      overflow: hidden; /* Prevent scroll */
+      -webkit-font-smoothing: antialiased;
+      -moz-osx-font-smoothing: grayscale;
+      perspective: 1200px;
+    }
+
+    h1, h2, h3, .font-outfit {
+      font-family: 'Outfit', sans-serif;
+    }
+
+    /* --- Glassmorphism --- */
+    .glass {
+      background: rgba(255, 255, 255, 0.03);
+      backdrop-filter: blur(25px) saturate(160%);
+      -webkit-backdrop-filter: blur(25px) saturate(160%);
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.6);
+      transform: translateZ(0);
+      will-change: transform, opacity;
+    }
+
+    .glass-high {
+      background: rgba(255, 255, 255, 0.07);
+      backdrop-filter: blur(50px) saturate(220%);
+      -webkit-backdrop-filter: blur(50px) saturate(220%);
+      border: 1px solid rgba(255, 255, 255, 0.15);
+      transform: translateZ(0);
+      will-change: transform, opacity;
+    }
+
+    .text-glow {
+      text-shadow: 0 0 15px rgba(255, 255, 255, 0.4), 0 0 30px rgba(59, 130, 246, 0.3);
+    }
+
+    /* --- Hide Scrollbars --- */
+    .no-scrollbar::-webkit-scrollbar { display: none; }
+    .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+
+    * { -webkit-tap-highlight-color: transparent; user-select: none; box-sizing: border-box; }
+    input, textarea { user-select: text; }
+
+    .will-change-transform { will-change: transform; transform: translateZ(0); }
+    .perspective-1200 { perspective: 1200px; }
+    .transform-style-3d { transform-style: preserve-3d; }
+
+    .vinyl-shine {
+      background: radial-gradient(circle at 50% 50%, transparent 40%, rgba(255,255,255,0.05) 45%, transparent 50%);
+      background-size: 200% 200%;
+    }
+
+    .scroll-smooth { scroll-behavior: smooth; }
+
+    /* --- Fit all screens --- */
+    #root {
+      width: 100%;
+      height: 100dvh; /* Full viewport height, dynamic */
+    }
+  </style>
+
+  <!-- Import maps for ESM modules -->
+  <script type="importmap">
+  {
+    "imports": {
+      "react": "https://esm.sh/react@18.2.0",
+      "react/": "https://esm.sh/react@18.2.0/",
+      "react-dom": "https://esm.sh/react-dom@18.2.0",
+      "react-dom/": "https://esm.sh/react-dom@18.2.0/",
+      "react-dom/client": "https://esm.sh/react-dom@18.2.0/client",
+      "lucide-react": "https://esm.sh/lucide-react@0.344.0?external=react",
+      "framer-motion": "https://esm.sh/framer-motion@11.0.8?external=react,react-dom",
+      "firebase/app": "https://esm.sh/firebase@10.8.0/app",
+      "firebase/auth": "https://esm.sh/firebase@10.8.0/auth",
+      "firebase/firestore": "https://esm.sh/firebase@10.8.0/firestore",
+      "firebase/storage": "https://esm.sh/firebase@10.8.0/storage",
+      "firebase/": "https://esm.sh/firebase@^12.9.0/"
+    }
+  }
+  </script>
+
+</head>
+<body class="w-screen h-screen overflow-hidden">
+  <div id="root"></div>
+  <script type="module" src="/index.tsx"></script>
+
+  <!-- Optional: Smooth background animation -->
+  <script>
+    // Animated subtle background blobs for smooth effect (optimized)
+    const root = document.getElementById('root');
+    const colors = ['rgba(59,130,246,0.1)','rgba(168,85,247,0.08)','rgba(14,165,233,0.05)'];
+    for(let i=0;i<3;i++){
+      const div = document.createElement('div');
+      div.style.position='absolute';
+      div.style.width='200%';
+      div.style.height='200%';
+      div.style.top='-50%';
+      div.style.left='-50%';
+      div.style.borderRadius='50%';
+      div.style.backgroundColor=colors[i];
+      div.style.filter='blur(150px)';
+      div.style.zIndex='0';
+      root.appendChild(div);
+      let angle=0;
+      const animate = () => {
+        angle+=0.05; // approx 20 FPS
+        div.style.transform=`rotate(${angle}deg) scale(1.05)`;
+        requestAnimationFrame(animate);
+      };
+      animate();
+    }
+  </script>
+</body>
 </html>
