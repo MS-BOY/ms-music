@@ -16,13 +16,13 @@ interface Props {
   onCancelEdit?: () => void;
 }
 
-const MAX_VIDEO_SIZE = 50 * 1024 * 1024;
+const MAX_VIDEO_SIZE = 50 * 1024 * 1024; // 50MB
 const GROUP_ID = 'group-1';
 const EMOJI_LIST = ['❤️','😂','🔥','🙌','😮','😢','💯','✨','🎵','🎹','🎸','🎧','⚡️','🌈','💎','👑','🚀','🛸','👾','🎉'];
 
-const ChatInput: React.FC<Props> = ({ 
-  onSend, onSendMedia, onSendTrack, libraryTracks = [], 
-  replyingTo, onCancelReply, editingMessage, onCancelEdit 
+const ChatInput: React.FC<Props> = ({
+  onSend, onSendMedia, onSendTrack, libraryTracks = [],
+  replyingTo, onCancelReply, editingMessage, onCancelEdit
 }) => {
   const [text, setText] = useState('');
   const [expanded, setExpanded] = useState(false);
@@ -37,159 +37,206 @@ const ChatInput: React.FC<Props> = ({
   const cameraRef = useRef<HTMLInputElement>(null);
   const galleryRef = useRef<HTMLInputElement>(null);
 
-  // Typing status
+  // Typing indicator
   useEffect(() => {
     const user = auth.currentUser;
     if (!user) return;
     const typingDoc = doc(db,'groups',GROUP_ID,'typing',user.uid);
-
-    if (text.trim().length>0) {
-      setDoc(typingDoc,{name:user.displayName||'Someone',avatar:user.photoURL||'https://picsum.photos/200',timestamp:Date.now()},{merge:true});
-      if (typingTimeout.current) clearTimeout(typingTimeout.current);
+    if(text.trim().length>0){
+      setDoc(typingDoc,{
+        name: user.displayName || 'Someone',
+        avatar: user.photoURL || 'https://picsum.photos/200',
+        timestamp: Date.now()
+      }, { merge:true });
+      if(typingTimeout.current) clearTimeout(typingTimeout.current);
       typingTimeout.current = setTimeout(()=>deleteDoc(typingDoc),3000);
     } else deleteDoc(typingDoc);
   },[text]);
 
-  useEffect(()=>{
+  // Focus input on reply/edit
+  useEffect(() => {
     if(inputRef.current) inputRef.current.focus();
     if(editingMessage) setText(editingMessage.content);
-  },[replyingTo,editingMessage]);
+  }, [replyingTo, editingMessage]);
 
-  const handleSend = ()=>{
+  const handleSend = () => {
+    if(!text.trim() && selectedMedia.length===0) return;
+
+    // Send media first
     if(selectedMedia.length>0){
       const hasVideo = selectedMedia.some(f=>f.type.startsWith('video/'));
-      onSendMedia(selectedMedia,hasVideo?'video':'image');
+      onSendMedia(selectedMedia, hasVideo?'video':'image');
       mediaPreviews.forEach(p=>URL.revokeObjectURL(p.url));
-      setSelectedMedia([]); setMediaPreviews([]);
-      if(text.trim()){onSend(text); setText('');}
-    } else if(text.trim()){onSend(text); setText('');}
+      setSelectedMedia([]);
+      setMediaPreviews([]);
+    }
+
+    // Send text
+    if(text.trim()){
+      onSend(text.trim());
+      setText('');
+    }
+
     if(inputRef.current) inputRef.current.style.height='auto';
     setEmojiOpen(false);
   };
 
-  const handleChange=(e:React.ChangeEvent<HTMLTextAreaElement>)=>{
+  const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+    if(e.key==='Enter' && !e.shiftKey){
+      e.preventDefault();
+      handleSend();
+    }
+  };
+
+  const handleInputChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
     setText(e.target.value);
     e.target.style.height='auto';
     e.target.style.height=`${e.target.scrollHeight}px`;
   };
 
-  const handleFile=(e:React.ChangeEvent<HTMLInputElement>)=>{
-    const files = Array.from(e.target.files||[]);
-    const valid:File[] = []; const previews:{url:string,type:'image'|'video'}[] = [];
-    files.forEach(f=>{
-      const isVideo=f.type.startsWith('video/'),isImage=f.type.startsWith('image/');
-      if(isVideo && f.size>MAX_VIDEO_SIZE){alert(`Video ${f.name} >50MB`); return;}
-      if(isVideo||isImage){valid.push(f); previews.push({url:URL.createObjectURL(f),type:isVideo?'video':'image'});}
+  const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>, type: 'camera'|'gallery') => {
+    const files = Array.from(e.target.files || []);
+    if(!files.length) return;
+
+    const validFiles: File[] = [];
+    const previews: {url:string,type:'image'|'video'}[] = [];
+
+    files.forEach(file=>{
+      const isVideo = file.type.startsWith('video/');
+      const isImage = file.type.startsWith('image/');
+      if(isVideo && file.size>MAX_VIDEO_SIZE) { alert(`Video ${file.name} exceeds 50MB.`); return; }
+      if(isVideo||isImage){
+        validFiles.push(file);
+        previews.push({url: URL.createObjectURL(file), type: isVideo?'video':'image'});
+      }
     });
-    setSelectedMedia(prev=>[...prev,...valid]);
+
+    setSelectedMedia(prev=>[...prev,...validFiles]);
     setMediaPreviews(prev=>[...prev,...previews]);
-    e.target.value='';
     setExpanded(false);
+    e.target.value='';
   };
 
-  const removeMedia=(i:number)=>{
-    const item = mediaPreviews[i]; if(item) URL.revokeObjectURL(item.url);
-    setSelectedMedia(prev=>prev.filter((_,idx)=>idx!==i));
-    setMediaPreviews(prev=>prev.filter((_,idx)=>idx!==i));
+  const removeMedia = (idx:number) => {
+    URL.revokeObjectURL(mediaPreviews[idx].url);
+    setSelectedMedia(prev=>prev.filter((_,i)=>i!==idx));
+    setMediaPreviews(prev=>prev.filter((_,i)=>i!==idx));
   };
 
-  const addEmoji=(emoji:string)=>{setText(prev=>prev+emoji); inputRef.current?.focus();};
-  const filteredTracks = libraryTracks.filter(t=>t.title.toLowerCase().includes(musicSearch.toLowerCase())||t.artist.toLowerCase().includes(musicSearch.toLowerCase()));
+  const addEmoji = (emoji:string) => {
+    setText(prev=>prev+emoji);
+    inputRef.current?.focus();
+  };
+
+  const filteredTracks = libraryTracks.filter(t =>
+    t.title.toLowerCase().includes(musicSearch.toLowerCase()) ||
+    t.artist.toLowerCase().includes(musicSearch.toLowerCase())
+  );
 
   return (
-    <div className="px-3 pb-3 w-full max-w-full relative z-20 flex flex-col gap-2">
+    <div className="px-4 py-4 w-full max-w-4xl relative z-20">
+      {/* Hidden inputs */}
+      <input type="file" ref={cameraRef} accept="image/*" capture="environment" className="hidden" onChange={e=>handleFileSelect(e,'camera')} />
+      <input type="file" ref={galleryRef} accept="image/*,video/*" multiple className="hidden" onChange={e=>handleFileSelect(e,'gallery')} />
 
-      <input type="file" ref={cameraRef} accept="image/*" capture="environment" className="hidden" onChange={handleFile} />
-      <input type="file" ref={galleryRef} accept="image/*,video/*" multiple className="hidden" onChange={handleFile} />
-
-      {/* Reply / Edit bar */}
+      {/* Emoji picker */}
       <AnimatePresence>
-        {(replyingTo||editingMessage) && (
-          <motion.div initial={{opacity:0,y:10}} animate={{opacity:1,y:0}} exit={{opacity:0,y:10}} className="overflow-hidden">
-            <div className={`flex items-center justify-between p-2 rounded-xl border ${editingMessage?'border-blue-500/30 bg-blue-500/5':'border-white/10 bg-white/5'}`}>
-              <div className="flex items-center gap-2 min-w-0">
-                <div className={`w-1 h-6 ${editingMessage?'bg-blue-500':'bg-white/40'} rounded-full shrink-0`} />
-                <div className="flex flex-col min-w-0 truncate">
-                  <span className="text-[10px] font-black text-blue-400 flex items-center gap-1 uppercase truncate">
-                    {editingMessage?<Edit2 size={10}/>:<CornerUpLeft size={10}/>}
-                    {editingMessage?'Editing':`Replying to ${replyingTo?.senderName}`}
-                  </span>
-                  <span className="text-xs text-white/60 truncate max-w-[180px]">{editingMessage?.content||replyingTo?.content}</span>
-                </div>
-              </div>
-              <button onClick={editingMessage?onCancelEdit:onCancelReply} className="p-1 hover:bg-white/10 rounded-full transition-colors"><X size={16} className="text-white/40"/></button>
+        {emojiOpen && (
+          <motion.div initial={{opacity:0,scale:0.9,y:10}} animate={{opacity:1,scale:1,y:0}} exit={{opacity:0,scale:0.9,y:10}} className="absolute bottom-full mb-4 right-4 glass-high p-4 rounded-2xl border border-white/10 z-50 bg-[#0a0a0a]/95 backdrop-blur-3xl">
+            <div className="grid grid-cols-5 gap-2">
+              {EMOJI_LIST.map(e=>
+                <motion.button key={e} onClick={()=>addEmoji(e)} whileTap={{scale:0.9}} className="text-2xl p-1 rounded hover:bg-white/5">{e}</motion.button>
+              )}
             </div>
           </motion.div>
         )}
       </AnimatePresence>
 
-      {/* Media preview */}
+      {/* Reply / Edit */}
+      <AnimatePresence>
+        {(replyingTo||editingMessage) && (
+          <motion.div initial={{opacity:0,y:10}} animate={{opacity:1,y:0}} exit={{opacity:0,y:10}} className="mb-2 overflow-hidden">
+            <div className={`glass flex items-center justify-between p-3 rounded-2xl border ${editingMessage?'border-blue-500/30 bg-blue-500/5':'border-white/10 bg-white/5'} backdrop-blur-md`}>
+              <div className="flex items-center gap-3 truncate">
+                <div className={`w-1 h-8 ${editingMessage?'bg-blue-500':'bg-white/40'} rounded-full shrink-0`} />
+                <div className="flex flex-col min-w-0 truncate">
+                  <span className="text-[10px] font-black text-blue-400 flex items-center gap-1 uppercase">
+                    {editingMessage?<Edit2 size={10}/> : <CornerUpLeft size={10}/>}
+                    {editingMessage?'Editing':'Replying'}
+                  </span>
+                  <span className="text-xs text-white/60 truncate">{editingMessage?.content || replyingTo?.content}</span>
+                </div>
+              </div>
+              <button onClick={editingMessage?onCancelEdit:onCancelReply} className="p-2 hover:bg-white/10 rounded-full transition-colors">
+                <X size={16} className="text-white/40"/>
+              </button>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* Media previews */}
       <AnimatePresence>
         {mediaPreviews.length>0 && (
-          <motion.div initial={{opacity:0,y:10}} animate={{opacity:1,y:0}} exit={{opacity:0,y:10}} className="flex gap-2 overflow-x-auto no-scrollbar">
-            {mediaPreviews.map((item,idx)=>(
-              <motion.div key={item.url} className="relative flex-shrink-0 w-20 h-20 rounded-xl overflow-hidden border border-white/10">
-                {item.type==='video'?<video src={`${item.url}#t=0.1`} className="w-full h-full object-cover brightness-75" muted playsInline/>:<img src={item.url} className="w-full h-full object-cover"/>}
-                <button onClick={()=>removeMedia(idx)} className="absolute top-1 right-1 w-6 h-6 bg-black/60 rounded-full flex items-center justify-center hover:bg-red-500 border border-white/10"><X size={12} className="text-white"/></button>
-              </motion.div>
+          <motion.div initial={{opacity:0,y:20}} animate={{opacity:1,y:0}} exit={{opacity:0,y:20}} className="mb-2 overflow-x-auto flex gap-2">
+            {mediaPreviews.map((p,idx)=>(
+              <div key={p.url} className="relative w-24 h-24 rounded-2xl overflow-hidden border border-white/10">
+                {p.type==='video'? <video src={p.url} className="w-full h-full object-cover" muted playsInline /> : <img src={p.url} className="w-full h-full object-cover" />}
+                <button onClick={()=>removeMedia(idx)} className="absolute top-1 right-1 w-6 h-6 bg-black/60 rounded-full flex items-center justify-center hover:bg-red-500">
+                  <X size={12} className="text-white"/>
+                </button>
+              </div>
             ))}
           </motion.div>
         )}
       </AnimatePresence>
 
-      {/* Main input */}
-      <motion.div className="flex items-end gap-2 bg-[#0a0a0a]/70 backdrop-blur-2xl rounded-2xl border border-white/10 p-1.5">
-        <motion.button onClick={()=>setExpanded(!expanded)} className="w-10 h-10 rounded-full flex items-center justify-center text-white/50 hover:bg-white/5 transition-all">
-          <Plus size={20}/>
-        </motion.button>
-        <textarea ref={inputRef} value={text} onChange={handleChange} rows={1} placeholder={replyingTo?'Compose reply...':editingMessage?'Edit message...':'Type a message...'} className="flex-1 bg-transparent border-none outline-none text-white text-sm placeholder:text-white/30 resize-none max-h-28 py-2"/>
-        <div className="flex items-center gap-1">
-          <motion.button onClick={()=>setEmojiOpen(!emojiOpen)} className="w-9 h-9 flex items-center justify-center text-white/40 hover:bg-white/5 rounded-full"><Smile size={20}/></motion.button>
-          <motion.button onClick={handleSend} className={`w-10 h-10 flex items-center justify-center rounded-2xl ${text||selectedMedia.length>0?'bg-blue-600 text-white':'bg-white/5 text-white/30 hover:bg-white/10'}`}>
-            {text||selectedMedia.length>0?<Send size={16}/>:<Mic size={20}/>}
+      {/* Input + actions */}
+      <motion.div className="flex items-end gap-2 p-2 bg-[#0a0a0a]/70 rounded-2xl border border-white/10 backdrop-blur-2xl">
+        {/* Plus button */}
+        <motion.div className="relative">
+          <motion.button onClick={()=>setExpanded(prev=>!prev)} whileTap={{scale:0.9,rotate:45}} className={`w-12 h-12 rounded-full flex items-center justify-center ${expanded?'bg-white text-black':'bg-white/5 text-white/60 hover:bg-white/10'}`}>
+            <Plus size={24} className={`${expanded?'rotate-45':''}`}/>
           </motion.button>
-        </div>
+
+          <AnimatePresence>
+            {expanded && (
+              <motion.div initial={{opacity:0,y:20}} animate={{opacity:1,y:0}} exit={{opacity:0,y:20}} className="absolute bottom-full mb-2 flex flex-col gap-2 p-2 bg-[#050505]/95 rounded-2xl border border-white/10">
+                <ActionButton icon={<Camera size={20}/>} color="blue" onClick={()=>cameraRef.current?.click()} label="Camera"/>
+                <ActionButton icon={<Image size={20}/>} color="purple" onClick={()=>galleryRef.current?.click()} label="Gallery"/>
+                <ActionButton icon={<MusicIcon size={20}/>} color="cyan" onClick={()=>{ setMusicOpen(true); setExpanded(false); }} label="Music"/>
+              </motion.div>
+            )}
+          </AnimatePresence>
+        </motion.div>
+
+        {/* Textarea */}
+        <textarea
+          ref={inputRef}
+          value={text}
+          onChange={handleInputChange}
+          onKeyDown={handleKeyDown}
+          placeholder={replyingTo?'Compose reply...': editingMessage?'Revise message...':'Type a message...'}
+          className="flex-1 bg-transparent border-none outline-none text-white text-sm resize-none max-h-32 py-3"
+          rows={1}
+        />
+
+        {/* Emoji + send */}
+        <motion.button onClick={()=>setEmojiOpen(prev=>!prev)} className={`w-10 h-10 rounded-full flex items-center justify-center ${emojiOpen?'text-yellow-400 bg-white/10':'text-white/30 hover:bg-white/5'}`}><Smile size={22}/></motion.button>
+        <motion.button onClick={handleSend} className={`w-11 h-11 rounded-2xl flex items-center justify-center ${text||selectedMedia.length>0?'bg-blue-600 text-white':'bg-white/5 text-white/30 hover:bg-white/10'}`}>
+          {text||selectedMedia.length>0?<Send size={18}/> : <Mic size={22}/>}
+        </motion.button>
       </motion.div>
-
-      {/* Emoji picker */}
-      <AnimatePresence>
-        {emojiOpen && (
-          <motion.div initial={{opacity:0,scale:0.9,y:10}} animate={{opacity:1,scale:1,y:0}} exit={{opacity:0,scale:0.9,y:10}} className="absolute bottom-full mb-2 right-3 p-3 bg-[#0a0a0a]/95 rounded-xl border border-white/10 grid grid-cols-5 gap-2">
-            {EMOJI_LIST.map(e=><motion.button key={e} whileTap={{scale:0.9}} onClick={()=>addEmoji(e)} className="text-xl">{e}</motion.button>)}
-          </motion.div>
-        )}
-      </AnimatePresence>
-
-      {/* Music selector modal */}
-      <AnimatePresence>
-        {musicOpen && (
-          <>
-            <motion.div className="fixed inset-0 bg-black/80 backdrop-blur-xl" onClick={()=>setMusicOpen(false)} initial={{opacity:0}} animate={{opacity:1}} exit={{opacity:0}}/>
-            <motion.div className="fixed bottom-0 left-0 right-0 z-50 bg-[#050505]/95 rounded-t-3xl h-[70vh] flex flex-col p-3" initial={{y:100,opacity:0}} animate={{y:0,opacity:1}} exit={{y:100,opacity:0}}>
-              <div className="flex items-center justify-between mb-2">
-                <h2 className="text-white font-black flex items-center gap-2"><MusicIcon className="text-cyan-400"/>Library Music</h2>
-                <button onClick={()=>setMusicOpen(false)}><X size={24} className="text-white/40"/></button>
-              </div>
-              <div className="relative mb-2">
-                <Search size={18} className="absolute left-3 top-1/2 -translate-y-1/2 text-white/30"/>
-                <input type="text" value={musicSearch} onChange={e=>setMusicSearch(e.target.value)} placeholder="Search..." className="w-full bg-white/5 border border-white/10 rounded-xl pl-10 pr-3 py-2 text-white text-sm outline-none"/>
-              </div>
-              <div className="flex-1 overflow-y-auto space-y-2">
-                {filteredTracks.map(track=>(
-                  <motion.div key={track.id} onClick={()=>{onSendTrack?.(track); setMusicOpen(false)}} className="flex items-center gap-2 p-2 rounded-xl hover:bg-white/5 cursor-pointer">
-                    <img src={track.albumArt} className="w-12 h-12 rounded-xl object-cover"/>
-                    <div className="flex-1 min-w-0">
-                      <h4 className="text-white text-sm font-black truncate">{track.title}</h4>
-                      <p className="text-cyan-400 text-[10px] truncate">{track.artist}</p>
-                    </div>
-                  </motion.div>
-                ))}
-              </div>
-            </motion.div>
-          </>
-        )}
-      </AnimatePresence>
     </div>
+  );
+};
+
+const ActionButton: React.FC<{icon:React.ReactNode,color:string,onClick:()=>void,label:string}> = ({icon,color,onClick})=>{
+  const colors: any = {blue:'text-blue-400 hover:bg-blue-500/10',purple:'text-purple-400 hover:bg-purple-500/10',cyan:'text-cyan-400 hover:bg-cyan-500/10'};
+  return (
+    <motion.button onClick={onClick} whileTap={{scale:0.95}} className={`w-12 h-12 flex items-center justify-center rounded-2xl border ${colors[color]||''}`}>
+      {icon}
+    </motion.button>
   );
 };
 
