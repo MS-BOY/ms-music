@@ -35,7 +35,27 @@ const App: React.FC = () => {
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const playPromiseRef = useRef<Promise<void> | null>(null);
 
-  /* ----------- AUTH STATE LISTENER ----------- */
+  /* ---------------- NEXT / PREV TRACK ---------------- */
+  const nextTrack = useCallback(() => {
+    if (!userTracks.length) return;
+    let nextIndex = 0;
+    if (currentTrack) {
+      const currentIndex = userTracks.findIndex((t) => t.id === currentTrack.id);
+      nextIndex = shuffleMode ? Math.floor(Math.random() * userTracks.length) : (currentIndex + 1) % userTracks.length;
+    }
+    setCurrentTrack(userTracks[nextIndex]);
+    setIsPlaying(true);
+  }, [currentTrack, userTracks, shuffleMode]);
+
+  const prevTrack = useCallback(() => {
+    if (!currentTrack || !userTracks.length) return;
+    const currentIndex = userTracks.findIndex((t) => t.id === currentTrack.id);
+    const prevIndex = (currentIndex - 1 + userTracks.length) % userTracks.length;
+    setCurrentTrack(userTracks[prevIndex]);
+    setIsPlaying(true);
+  }, [currentTrack, userTracks]);
+
+  /* ---------------- AUTH LISTENER ---------------- */
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (user) => {
       if (user) {
@@ -49,7 +69,6 @@ const App: React.FC = () => {
               avatar: data.photoURL || 'https://picsum.photos/200',
               bio: data.bio || 'Music enthusiast',
             });
-
             if (targetScreen) {
               setCurrentScreen(targetScreen);
               setTargetScreen(null);
@@ -67,7 +86,7 @@ const App: React.FC = () => {
     return () => unsubscribe();
   }, [targetScreen, currentScreen]);
 
-  /* ----------- TRACKS FETCH & REALTIME ----------- */
+  /* ---------------- FETCH TRACKS ---------------- */
   useEffect(() => {
     const q = query(collection(db, 'tracks'), orderBy('createdAt', 'desc'));
     const unsubscribe = onSnapshot(
@@ -92,16 +111,14 @@ const App: React.FC = () => {
     return () => unsubscribe();
   }, []);
 
-  /* ----------- AUDIO CONTROLS ----------- */
+  /* ---------------- AUDIO SETUP ---------------- */
   useEffect(() => {
-    if (!audioRef.current) {
-      audioRef.current = new Audio();
-      audioRef.current.crossOrigin = 'anonymous';
-    }
+    if (!audioRef.current) audioRef.current = new Audio();
     const audio = audioRef.current;
+    audio.crossOrigin = 'anonymous';
 
-    const onTimeUpdate = () => setCurrentTime(audio.currentTime || 0);
-    const onLoadedMetadata = () => setDuration(audio.duration || 0);
+    const onTimeUpdate = () => setCurrentTime(audio.currentTime);
+    const onLoadedMetadata = () => setDuration(audio.duration);
     const onEnded = () => {
       if (repeatMode === 'one') {
         audio.currentTime = 0;
@@ -120,7 +137,7 @@ const App: React.FC = () => {
     };
   }, [repeatMode, nextTrack]);
 
-  /* ----------- PLAYBACK SYNCHRONIZATION ----------- */
+  /* ---------------- SYNC PLAYBACK ---------------- */
   useEffect(() => {
     const audio = audioRef.current;
     if (!audio || !currentTrack) return;
@@ -131,7 +148,6 @@ const App: React.FC = () => {
         audio.src = currentTrack.audioUrl;
         audio.load();
       }
-
       if (isPlaying) {
         try {
           playPromiseRef.current = audio.play();
@@ -140,39 +156,18 @@ const App: React.FC = () => {
           if (err.name !== 'AbortError') console.warn('Playback error:', err);
         }
       } else {
-        if (playPromiseRef.current) {
-          playPromiseRef.current.then(() => audio.pause()).catch(() => {});
-        } else audio.pause();
+        audio.pause();
       }
     };
     syncAudio();
   }, [currentTrack, isPlaying]);
 
-  /* ----------- NAVIGATION & PLAYER LOGIC ----------- */
+  /* ---------------- USER ACTIONS ---------------- */
   const togglePlay = useCallback(() => setIsPlaying((p) => !p), []);
   const seek = (time: number) => {
     if (audioRef.current) audioRef.current.currentTime = time;
     setCurrentTime(time);
   };
-
-  const nextTrack = useCallback(() => {
-    if (!userTracks.length) return;
-    let nextIndex = 0;
-    if (currentTrack) {
-      const currentIndex = userTracks.findIndex((t) => t.id === currentTrack.id);
-      nextIndex = shuffleMode ? Math.floor(Math.random() * userTracks.length) : (currentIndex + 1) % userTracks.length;
-    }
-    setCurrentTrack(userTracks[nextIndex]);
-    setIsPlaying(true);
-  }, [currentTrack, userTracks, shuffleMode]);
-
-  const prevTrack = useCallback(() => {
-    if (!currentTrack || !userTracks.length) return;
-    const currentIndex = userTracks.findIndex((t) => t.id === currentTrack.id);
-    const prevIndex = (currentIndex - 1 + userTracks.length) % userTracks.length;
-    setCurrentTrack(userTracks[prevIndex]);
-    setIsPlaying(true);
-  }, [currentTrack, userTracks]);
 
   const toggleFavorite = (trackId: string) => {
     setUserTracks((prev) =>
@@ -204,7 +199,7 @@ const App: React.FC = () => {
     [currentUser]
   );
 
-  /* ----------- SCREEN ANIMATION VARIANTS ----------- */
+  /* ---------------- SCREEN ANIMATION ---------------- */
   const screenVariants: Variants = {
     initial: { opacity: 0, scale: 0.96, filter: 'blur(8px)', y: 10 },
     animate: { opacity: 1, scale: 1, filter: 'blur(0px)', y: 0, transition: { duration: 0.6, ease: [0.16, 1, 0.3, 1] } },
@@ -214,10 +209,10 @@ const App: React.FC = () => {
   const showBottomNav = ['home', 'library'].includes(currentScreen);
   const showMiniPlayer = Boolean(currentTrack && !['splash', 'auth'].includes(currentScreen) && !isPlayerExpanded);
 
-  /* ----------- RENDER ----------- */
+  /* ---------------- RENDER ---------------- */
   return (
     <div className="relative h-screen w-full bg-[#020202] overflow-hidden text-white font-inter selection:bg-blue-500/30">
-      {/* BACKGROUND EFFECTS */}
+      {/* Background effects */}
       <div className="absolute inset-0 pointer-events-none overflow-hidden z-0">
         <motion.div
           animate={{ opacity: [0.3, 0.5, 0.3], scale: [1, 1.1, 1], rotate: [0, 45, 0] }}
@@ -232,7 +227,7 @@ const App: React.FC = () => {
         <div className="absolute inset-0 bg-[url('https://grainy-gradients.vercel.app/noise.svg')] opacity-[0.03] mix-blend-overlay" />
       </div>
 
-      {/* SCREENS */}
+      {/* Screens */}
       <AnimatePresence mode="wait">
         <motion.div
           key={currentScreen}
@@ -242,20 +237,23 @@ const App: React.FC = () => {
           exit="exit"
           className="relative z-10 w-full h-full transform-style-3d will-change-transform"
         >
-          {{
-            splash: <SplashScreen onFinish={() => setCurrentScreen('home')} />,
-            auth: <AuthScreen onLogin={() => {}} onCancel={() => { setTargetScreen(null); setCurrentScreen('home'); }} />,
-            home: <HomeScreen tracks={userTracks} user={currentUser} onSelectTrack={handleTrackSelect} onNavigateProfile={() => navigateTo('profile')} onSeeAll={() => navigateTo('library')} hasPlayer={showMiniPlayer} />,
-            library: <LibraryScreen tracks={userTracks} onSelectTrack={handleTrackSelect} onUploadRequest={() => navigateTo('upload')} onToggleFavorite={toggleFavorite} hasPlayer={showMiniPlayer} />,
-            upload: <UploadMusicScreen onUploadSuccess={() => navigateTo('library')} onCancel={() => navigateTo('library')} hasPlayer={showMiniPlayer} />,
-            chat: <ChatScreen tracks={userTracks} onSelectTrack={handleTrackSelect} onBack={() => setCurrentScreen('home')} onSettings={() => navigateTo('settings')} hasPlayer={showMiniPlayer} />,
-            profile: <ProfileScreen user={currentUser} onBack={() => setCurrentScreen('home')} onLogout={handleLogout} hasPlayer={showMiniPlayer} />,
-            settings: <SettingsScreen onBack={() => setCurrentScreen('chat')} onLogout={handleLogout} hasPlayer={showMiniPlayer} />,
-          }[currentScreen]}
+          {(() => {
+            switch (currentScreen) {
+              case 'splash': return <SplashScreen onFinish={() => setCurrentScreen('home')} />;
+              case 'auth': return <AuthScreen onLogin={() => {}} onCancel={() => { setTargetScreen(null); setCurrentScreen('home'); }} />;
+              case 'home': return <HomeScreen tracks={userTracks} user={currentUser} onSelectTrack={handleTrackSelect} onNavigateProfile={() => navigateTo('profile')} onSeeAll={() => navigateTo('library')} hasPlayer={showMiniPlayer} />;
+              case 'library': return <LibraryScreen tracks={userTracks} onSelectTrack={handleTrackSelect} onUploadRequest={() => navigateTo('upload')} onToggleFavorite={toggleFavorite} hasPlayer={showMiniPlayer} />;
+              case 'upload': return <UploadMusicScreen onUploadSuccess={() => navigateTo('library')} onCancel={() => navigateTo('library')} hasPlayer={showMiniPlayer} />;
+              case 'chat': return <ChatScreen tracks={userTracks} onSelectTrack={handleTrackSelect} onBack={() => setCurrentScreen('home')} onSettings={() => navigateTo('settings')} hasPlayer={showMiniPlayer} />;
+              case 'profile': return <ProfileScreen user={currentUser} onBack={() => setCurrentScreen('home')} onLogout={handleLogout} hasPlayer={showMiniPlayer} />;
+              case 'settings': return <SettingsScreen onBack={() => setCurrentScreen('chat')} onLogout={handleLogout} hasPlayer={showMiniPlayer} />;
+              default: return null;
+            }
+          })()}
         </motion.div>
       </AnimatePresence>
 
-      {/* MINI PLAYER */}
+      {/* Mini Player */}
       <AnimatePresence>
         {showMiniPlayer && currentTrack && (
           <MiniPlayer
@@ -270,12 +268,12 @@ const App: React.FC = () => {
         )}
       </AnimatePresence>
 
-      {/* BOTTOM NAV */}
+      {/* Bottom Nav */}
       <AnimatePresence>
         {showBottomNav && !isPlayerExpanded && <BottomNav currentScreen={currentScreen} onNavigate={navigateTo} />}
       </AnimatePresence>
 
-      {/* FULL PLAYER */}
+      {/* Full Player */}
       <AnimatePresence>
         {isPlayerExpanded && currentTrack && (
           <FullPlayer
