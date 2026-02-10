@@ -12,12 +12,11 @@ interface Props {
   onSelectTrack?: (track: Track) => void;
 }
 
-// GPU-Accelerated entry for high-refresh screens
 const messageVariants = {
-  initial: { opacity: 0, y: 12, scale: 0.94, filter: 'blur(4px)' },
+  initial: { opacity: 0, y: 10, scale: 0.95 },
   animate: { 
-    opacity: 1, y: 0, scale: 1, filter: 'blur(0px)',
-    transition: { type: 'spring', damping: 25, stiffness: 450, mass: 0.6 }
+    opacity: 1, y: 0, scale: 1,
+    transition: { type: 'spring', damping: 25, stiffness: 500, mass: 0.5 }
   }
 };
 
@@ -26,13 +25,13 @@ const MessageBubble: React.FC<Props> = ({ message, isMe, showAvatar, onOpenMenu,
   const isSending = message.status === 'sending';
   const isText = message.type === 'text' || message.isUnsent;
 
-  // New Feature: Extract First Name for others
+  // Extract First Name only
   const firstName = message.senderName ? message.senderName.split(' ')[0] : 'User';
 
   const handleTouchStart = (e: React.TouchEvent) => {
     if (!onOpenMenu || isSending) return;
     longPressTimer.current = setTimeout(() => {
-      if (typeof navigator !== 'undefined' && navigator.vibrate) navigator.vibrate(35);
+      if (typeof navigator !== 'undefined' && navigator.vibrate) navigator.vibrate(40);
       onOpenMenu(e, message);
     }, 450);
   };
@@ -49,7 +48,7 @@ const MessageBubble: React.FC<Props> = ({ message, isMe, showAvatar, onOpenMenu,
         try {
           const track = JSON.parse(message.content) as Track;
           return (
-            <div onClick={() => onSelectTrack?.(track)} className="flex items-center gap-3 p-2 bg-white/[0.04] border border-white/5 rounded-2xl cursor-pointer min-w-[220px] active:scale-95 transition-transform">
+            <div onClick={() => onSelectTrack?.(track)} className="flex items-center gap-3 p-2 bg-white/[0.05] border border-white/5 rounded-2xl cursor-pointer min-w-[220px] active:scale-95 transition-transform">
               <img src={track.albumArt} className="w-12 h-12 rounded-xl object-cover shadow-lg" loading="lazy" />
               <div className="flex-1 min-w-0">
                 <h4 className="text-[13px] font-bold text-white truncate">{track.title}</h4>
@@ -62,13 +61,13 @@ const MessageBubble: React.FC<Props> = ({ message, isMe, showAvatar, onOpenMenu,
       case 'image':
       case 'video':
         return (
-          <div onClick={() => onMediaClick?.(message.content, [])} className="relative aspect-square w-[260px] rounded-[26px] overflow-hidden bg-white/[0.02] shadow-2xl will-change-transform">
+          <div onClick={() => onMediaClick?.(message.content, [])} className="relative aspect-square w-[260px] rounded-[24px] overflow-hidden bg-white/[0.02] shadow-2xl will-change-transform">
             {message.type === 'video' ? (
               <video src={message.content} className="w-full h-full object-cover" muted playsInline />
             ) : (
-              <img src={item.url} className="w-full h-full object-cover" loading="lazy" />
+              <img src={message.content} className="w-full h-full object-cover" loading="lazy" />
             )}
-            {isSending && <div className="absolute inset-0 bg-black/40 backdrop-blur-md flex items-center justify-center animate-pulse" />}
+            {isSending && <div className="absolute inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center animate-pulse" />}
           </div>
         );
 
@@ -82,23 +81,23 @@ const MessageBubble: React.FC<Props> = ({ message, isMe, showAvatar, onOpenMenu,
       variants={messageVariants}
       initial="initial"
       animate="animate"
-      style={{ willChange: 'transform, opacity' }} // Forces GPU layering
+      style={{ willChange: 'transform, opacity' }}
       className={`flex flex-col ${isMe ? 'items-end' : 'items-start'} mb-1 w-full px-3 group`}
       onTouchStart={handleTouchStart}
       onTouchEnd={handleTouchEnd}
       onContextMenu={(e) => { e.preventDefault(); onOpenMenu?.(e, message); }}
     >
-      {/* FEATURE: FIRST NAME DISPLAY */}
+      {/* Display First Name for others */}
       {!isMe && showAvatar && (
-        <span className="text-[10px] font-bold text-white/20 uppercase tracking-[0.2em] mb-1 ml-10">
+        <span className="text-[10px] font-bold text-white/20 uppercase tracking-[0.15em] mb-1 ml-10">
           {firstName}
         </span>
       )}
 
       <div className={`flex gap-2 max-w-[88%] ${isMe ? 'flex-row-reverse' : 'flex-row'}`}>
         {!isMe && showAvatar ? (
-          <div className="w-8 h-8 rounded-full border border-white/10 shrink-0 self-end mb-1 overflow-hidden">
-            <img src={message.senderAvatar} className="w-full h-full object-cover" loading="lazy" />
+          <div className="w-8 h-8 rounded-full border border-white/10 shrink-0 self-end mb-1 overflow-hidden shadow-md">
+            <img src={message.senderAvatar} className="w-full h-full object-cover" alt="" />
           </div>
         ) : !isMe && <div className="w-8" />}
 
@@ -116,16 +115,18 @@ const MessageBubble: React.FC<Props> = ({ message, isMe, showAvatar, onOpenMenu,
             {renderContent()}
           </div>
 
-          {/* FEATURE: GHOST TIME (Hide/Hover Show) */}
+          {/* HIDDEN TIME: Shows on Group Hover/Tap */}
           <div className={`
-            flex items-center gap-1 mt-1 transition-all duration-300 ease-out
+            flex items-center gap-1.5 mt-1 transition-all duration-300 ease-out
             opacity-0 translate-y-[-5px] group-hover:opacity-40 group-hover:translate-y-0
             ${isMe ? 'justify-end' : 'justify-start'} ${!isText ? 'px-1' : ''}
           `}>
             <span className="text-[9px] font-bold tabular-nums">
               {new Date(message.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
             </span>
-            {isMe && !isSending && <CheckCheck size={10} className="text-blue-400" />}
+            {isMe && !isSending && (
+              <CheckCheck size={10} className={isText ? "text-blue-400" : "text-white/60"} />
+            )}
           </div>
         </div>
       </div>
@@ -133,12 +134,6 @@ const MessageBubble: React.FC<Props> = ({ message, isMe, showAvatar, onOpenMenu,
   );
 };
 
-// CRITICAL: Strict memoization for 2GB RAM stability
 export default memo(MessageBubble, (p, n) => {
-  return (
-    p.message.id === n.message.id &&
-    p.message.status === n.message.status &&
-    p.showAvatar === n.showAvatar &&
-    p.message.reactions?.length === n.message.reactions?.length
-  );
+  return p.message.id === n.message.id && p.message.status === n.message.status && p.showAvatar === n.showAvatar;
 });
