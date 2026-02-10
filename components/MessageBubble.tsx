@@ -1,8 +1,8 @@
 import React, { useRef, memo, useMemo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Message, Track } from '../types';
 import { Play, CheckCheck } from 'lucide-react';
 import SwipeableMessage from './SwipeableMessage';
+import { Message, Track } from '../types';
 
 /* ----------------------------------------
    DEVICE PERFORMANCE DETECTION
@@ -25,9 +25,9 @@ const messageVariants = {
       type: 'spring',
       stiffness: 420,
       damping: 30,
-      mass: 0.7
-    }
-  }
+      mass: 0.7,
+    },
+  },
 };
 
 interface Props {
@@ -47,10 +47,9 @@ const MessageBubble: React.FC<Props> = ({
   onReply,
   onOpenMenu,
   onMediaClick,
-  onSelectTrack
+  onSelectTrack,
 }) => {
   const longPressTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-
   const isSending = message.status === 'sending';
   const isText = message.type === 'text';
 
@@ -61,9 +60,9 @@ const MessageBubble: React.FC<Props> = ({
     if (!message.attachments?.length)
       return [{ url: message.content, type: 'image' as const }];
 
-    return message.attachments.map(url => ({
+    return message.attachments.map((url) => ({
       url,
-      type: /\.(mp4|webm|mov|ogg)$/i.test(url) ? 'video' : 'image'
+      type: /\.(mp4|webm|mov|ogg)$/i.test(url) ? 'video' : 'image',
     }));
   }, [message.attachments, message.content]);
 
@@ -124,10 +123,15 @@ const MessageBubble: React.FC<Props> = ({
               <div
                 key={i}
                 onClick={() => onMediaClick?.(item.url, mediaItems)}
-                className="relative aspect-square rounded-[22px] overflow-hidden bg-white/[0.03]"
+                className="relative aspect-square rounded-[22px] overflow-hidden bg-white/[0.03] cursor-pointer"
               >
                 {item.type === 'video' ? (
-                  <video src={item.url} muted playsInline className="w-full h-full object-cover" />
+                  <video
+                    src={item.url}
+                    muted
+                    playsInline
+                    className="w-full h-full object-cover"
+                  />
                 ) : (
                   <img src={item.url} className="w-full h-full object-cover" />
                 )}
@@ -149,10 +153,7 @@ const MessageBubble: React.FC<Props> = ({
      RENDER
   ----------------------------------------- */
   return (
-    <SwipeableMessage
-      isMe={isMe}
-      onReply={() => onReply?.(message)}
-    >
+    <SwipeableMessage isMe={isMe} onReply={() => onReply?.(message)}>
       <motion.div
         variants={messageVariants}
         initial="initial"
@@ -162,12 +163,13 @@ const MessageBubble: React.FC<Props> = ({
         className={`flex flex-col w-full px-3 ${isMe ? 'items-end' : 'items-start'}`}
         onTouchStart={handleTouchStart}
         onTouchEnd={handleTouchEnd}
-        onContextMenu={e => {
+        onContextMenu={(e) => {
           e.preventDefault();
           onOpenMenu?.(e, message);
         }}
       >
         <div className={`flex gap-2 max-w-[88%] ${isMe ? 'flex-row-reverse' : ''}`}>
+          {/* Avatar */}
           {!isMe && showAvatar ? (
             <img
               src={message.senderAvatar}
@@ -178,34 +180,38 @@ const MessageBubble: React.FC<Props> = ({
           ) : null}
 
           <div className="flex flex-col">
+            {/* Sender name */}
             {!isMe && showAvatar && (
               <span className="text-[10px] font-bold text-white/40 mb-1 ml-2">
                 {message.senderName}
               </span>
             )}
 
+            {/* Message bubble */}
             <div
-              className={`group relative
-                ${isText
+              className={`group relative ${
+                isText
                   ? isMe
                     ? 'bg-blue-600/15 border-blue-500/20 rounded-[22px] rounded-tr-[4px]'
                     : 'bg-white/[0.08] border-white/10 rounded-[22px] rounded-tl-[4px]'
-                  : ''}
-                border px-4 py-2.5 backdrop-blur-xl`}
+                  : ''
+              } border px-4 py-2.5 backdrop-blur-xl`}
             >
               {renderContent()}
 
+              {/* Timestamp & check */}
               <div className="absolute -bottom-4 right-1 opacity-0 group-hover:opacity-40 transition-opacity">
                 <span className="text-[9px] tabular-nums">
                   {new Date(message.timestamp).toLocaleTimeString([], {
                     hour: '2-digit',
-                    minute: '2-digit'
+                    minute: '2-digit',
                   })}
                 </span>
                 {isMe && !isSending && <CheckCheck size={10} className="inline ml-1" />}
               </div>
             </div>
 
+            {/* Reactions */}
             <AnimatePresence>
               {!!message.reactions?.length && (
                 <motion.div
@@ -231,12 +237,12 @@ const MessageBubble: React.FC<Props> = ({
 /* ----------------------------------------
    MEMO OPTIMIZATION
 ----------------------------------------- */
-export default memo(MessageBubble, (p, n) => {
+export default memo(MessageBubble, (prev, next) => {
   return (
-    p.message.id === n.message.id &&
-    p.message.content === n.message.content &&
-    p.message.status === n.message.status &&
-    p.message.reactions?.length === n.message.reactions?.length &&
-    p.showAvatar === n.showAvatar
+    prev.message.id === next.message.id &&
+    prev.message.content === next.message.content &&
+    prev.message.status === next.message.status &&
+    prev.message.reactions?.length === next.message.reactions?.length &&
+    prev.showAvatar === next.showAvatar
   );
 });
