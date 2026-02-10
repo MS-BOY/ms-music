@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { ChevronDown, Play, Pause, SkipBack, SkipForward, Repeat, Shuffle, ListMusic, X, Music } from 'lucide-react';
 import { Track } from '../types';
@@ -22,15 +22,31 @@ interface Props {
   onSelectTrack: (track: Track) => void;
 }
 
-const formatTime = (s: number) => `${Math.floor(s/60)}:${Math.floor(s%60).toString().padStart(2,'0')}`;
+const formatTime = (s: number) => `${Math.floor(s / 60)}:${Math.floor(s % 60).toString().padStart(2, '0')}`;
 
 const FullPlayer: React.FC<Props> = ({
   track, isPlaying, currentTime, duration, shuffleMode, repeatMode, tracks,
   onToggle, onNext, onPrev, onSeek, onToggleShuffle, onToggleRepeat, onClose, onSelectTrack
 }) => {
   const [showQueue, setShowQueue] = useState(false);
+  const vinylRef = useRef<HTMLDivElement>(null);
 
-  // Minimal spring for screens
+  // Slow, low-FPS rotation for vinyl (~20 FPS)
+  useEffect(() => {
+    if (!vinylRef.current) return;
+    let rotation = 0;
+    let frame: number;
+
+    const animate = () => {
+      rotation += isPlaying ? 0.6 : 0; // ~0.6deg per frame -> ~20 FPS
+      if (vinylRef.current) vinylRef.current.style.transform = `rotate(${rotation}deg)`;
+      frame = requestAnimationFrame(() => setTimeout(animate, 50)); // ~20 FPS
+    };
+
+    animate();
+    return () => cancelAnimationFrame(frame);
+  }, [isPlaying]);
+
   const screenVariants = {
     initial: { y: '100%', opacity: 0 },
     animate: { y: 0, opacity: 1, transition: { duration: 0.25, ease: 'easeOut' } },
@@ -43,9 +59,9 @@ const FullPlayer: React.FC<Props> = ({
       initial="initial"
       animate="animate"
       exit="exit"
-      className="fixed inset-0 z-[120] bg-[#020202] flex flex-col overflow-hidden"
+      className="fixed inset-0 z-[120] bg-[#020202] flex flex-col overflow-hidden h-[100dvh]"
     >
-      {/* Static Background Blur */}
+      {/* Static Background */}
       <div className="absolute inset-0 pointer-events-none">
         <img src={track.albumArt} alt="" className="w-full h-full object-cover opacity-20 blur-[30px]" />
         <div className="absolute inset-0 bg-gradient-to-b from-black/40 via-black/80 to-[#020202]" />
@@ -78,8 +94,8 @@ const FullPlayer: React.FC<Props> = ({
             >
               {/* Album Art */}
               <div
-                className="relative w-[70vw] h-[70vw] max-w-[320px] max-h-[320px] rounded-full overflow-hidden"
-                style={{ transform: isPlaying ? 'rotate(0deg)' : 'rotate(0deg)' }}
+                ref={vinylRef}
+                className="relative w-[60vw] max-w-[300px] aspect-square rounded-full overflow-hidden"
               >
                 <img src={track.albumArt} alt={track.title} className="w-full h-full object-cover rounded-full" />
               </div>
