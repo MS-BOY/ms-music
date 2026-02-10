@@ -1,11 +1,6 @@
+// components/SwipeableMessage.tsx
 import React, { memo } from 'react';
-import {
-  motion,
-  useMotionValue,
-  useTransform,
-  useAnimation,
-  PanInfo,
-} from 'framer-motion';
+import { motion, useMotionValue, useTransform, useAnimation, PanInfo } from 'framer-motion';
 import { Reply } from 'lucide-react';
 
 interface Props {
@@ -21,12 +16,10 @@ const SwipeableMessage: React.FC<Props> = ({ children, onReply, isMe }) => {
   const controls = useAnimation();
   const x = useMotionValue(0);
 
-  // Drag direction control
   const dragConstraints = isMe
     ? { left: -SWIPE_LIMIT, right: 0 }
     : { left: 0, right: SWIPE_LIMIT };
 
-  // GPU-friendly transforms
   const opacity = useTransform(
     x,
     isMe ? [-TRIGGER_DISTANCE, -20] : [20, TRIGGER_DISTANCE],
@@ -53,40 +46,22 @@ const SwipeableMessage: React.FC<Props> = ({ children, onReply, isMe }) => {
 
     if (shouldReply) {
       onReply();
-
-      // Light haptic (safe)
-      if (navigator?.vibrate) {
-        navigator.vibrate(40);
-      }
+      navigator?.vibrate?.(40);
     }
 
-    // Snap back smoothly
     await controls.start({
       x: 0,
-      transition: {
-        type: 'spring',
-        stiffness: 420,
-        damping: 32,
-      },
+      transition: { type: 'spring', stiffness: 420, damping: 32 },
     });
   };
 
   return (
-    <div
-      className={`relative w-full flex ${
-        isMe ? 'justify-end' : 'justify-start'
-      } px-2`}
-    >
+    <div className={`relative w-full flex ${isMe ? 'justify-end' : 'justify-start'} px-2`}>
       {/* Reply Icon */}
-      <div
-        className={`absolute inset-y-0 flex items-center pointer-events-none ${
-          isMe ? 'right-3' : 'left-3'
-        }`}
-      >
+      <div className={`absolute inset-y-0 flex items-center pointer-events-none ${isMe ? 'right-3' : 'left-3'}`}>
         <motion.div
           style={{ opacity, scale, rotate }}
-          className="w-8 h-8 rounded-full bg-white/10 backdrop-blur-md
-                     flex items-center justify-center text-white"
+          className="w-8 h-8 rounded-full bg-white/10 backdrop-blur-md flex items-center justify-center text-white"
         >
           <Reply size={16} />
         </motion.div>
@@ -99,11 +74,7 @@ const SwipeableMessage: React.FC<Props> = ({ children, onReply, isMe }) => {
         dragElastic={0.04}
         onDragEnd={handleDragEnd}
         animate={controls}
-        style={{
-          x,
-          touchAction: 'pan-y',
-          willChange: 'transform',
-        }}
+        style={{ x, touchAction: 'pan-y', willChange: 'transform' }}
         className="relative z-10 max-w-[85%]"
       >
         {children}
