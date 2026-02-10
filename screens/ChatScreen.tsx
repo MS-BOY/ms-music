@@ -29,79 +29,71 @@ const ChatScreen: React.FC<Props> = ({ onBack, onSettings, hasPlayer, tracks, on
   const [groupData, setGroupData] = useState<Group>(MS_GROUP);
   const [memberCount, setMemberCount] = useState(0);
   const [typingUsers, setTypingUsers] = useState<any[]>([]);
-
-  const scrollRef = useRef<HTMLDivElement>(null);
+  const [replyingTo, setReplyingTo] = useState<Message | null>(null);
+  const [editingMessage, setEditingMessage] = useState<Message | null>(null);
 
   const [menuOpen, setMenuOpen] = useState(false);
   const [selectedMessage, setSelectedMessage] = useState<Message | null>(null);
   const [menuPosition, setMenuPosition] = useState({ x: 0, y: 0 });
-  const [replyingTo, setReplyingTo] = useState<Message | null>(null);
-  const [editingMessage, setEditingMessage] = useState<Message | null>(null);
 
   const [viewerOpen, setViewerOpen] = useState(false);
   const [viewerItems, setViewerItems] = useState<{ url: string, type: 'image' | 'video' }[]>([]);
   const [viewerIndex, setViewerIndex] = useState(0);
 
-  // --- Load group data ---
+  const scrollRef = useRef<HTMLDivElement>(null);
+
+  // --- Load group ---
   useEffect(() => {
     const groupRef = doc(db, 'groups', GROUP_ID);
-    getDoc(groupRef).then((snap) => {
-      if (!snap.exists()) setDoc(groupRef, MS_GROUP);
-    });
-    const unsubscribe = onSnapshot(groupRef, (doc) => {
-      if (doc.exists()) setGroupData(doc.data() as Group);
-    });
-    return () => unsubscribe();
+    getDoc(groupRef).then(snap => !snap.exists() && setDoc(groupRef, MS_GROUP));
+    const unsub = onSnapshot(groupRef, snap => snap.exists() && setGroupData(snap.data() as Group));
+    return () => unsub();
   }, []);
 
-  // --- Listen typing users ---
+  // --- Typing users ---
   useEffect(() => {
     const typingRef = collection(db, 'groups', GROUP_ID, 'typing');
-    const unsubscribe = onSnapshot(typingRef, (snapshot) => {
+    const unsub = onSnapshot(typingRef, snapshot => {
       const now = Date.now();
       const users = snapshot.docs
         .map(doc => ({ id: doc.id, ...doc.data() } as any))
-        .filter(user => user.id !== auth.currentUser?.uid && (now - user.timestamp) < 5000);
+        .filter(u => u.id !== auth.currentUser?.uid && (now - u.timestamp) < 5000);
       setTypingUsers(users);
     });
-
     const interval = setInterval(() => {
       const now = Date.now();
-      setTypingUsers(prev => prev.filter(user => (now - user.timestamp) < 5000));
+      setTypingUsers(prev => prev.filter(u => (now - u.timestamp) < 5000));
     }, 2000);
-
     return () => {
-      unsubscribe();
+      unsub();
       clearInterval(interval);
     };
   }, []);
 
   // --- Member count ---
   useEffect(() => {
-    const unsubscribe = onSnapshot(collection(db, 'users'), (snapshot) => {
-      setMemberCount(snapshot.size);
-    });
-    return () => unsubscribe();
+    const unsub = onSnapshot(collection(db, 'users'), snapshot => setMemberCount(snapshot.size));
+    return () => unsub();
   }, []);
 
-  // --- Load messages ---
+  // --- Messages ---
   useEffect(() => {
     const messagesRef = collection(db, 'groups', GROUP_ID, 'messages');
     const q = query(messagesRef, orderBy('timestamp', 'asc'));
-    const unsubscribe = onSnapshot(q, snapshot => {
+    const unsub = onSnapshot(q, snapshot => {
       const msgs = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Message));
       setMessages(msgs);
       setOptimisticMessages(prev => prev.filter(om => !msgs.some(m => m.timestamp === om.timestamp)));
     });
-    return () => unsubscribe();
+    return () => unsub();
   }, []);
 
-  // --- Auto scroll ---
+  // --- Scroll to bottom ---
   useLayoutEffect(() => {
     if (scrollRef.current) scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
   }, [messages.length, optimisticMessages.length]);
 
-  // --- Cloudinary upload helper ---
+  // --- Cloudinary Upload ---
   const uploadToCloudinary = async (file: File, onProgress: (p: number) => void): Promise<string> => {
     const formData = new FormData();
     formData.append('file', file);
@@ -110,17 +102,16 @@ const ChatScreen: React.FC<Props> = ({ onBack, onSettings, hasPlayer, tracks, on
     return new Promise((resolve, reject) => {
       const xhr = new XMLHttpRequest();
       xhr.open('POST', CLOUDINARY_UPLOAD_URL, true);
-      xhr.upload.onprogress = (e) => e.lengthComputable && onProgress(Math.round((e.loaded / e.total) * 100));
+      xhr.upload.onprogress = e => e.lengthComputable && onProgress(Math.round((e.loaded / e.total) * 100));
       xhr.onload = () => xhr.status === 200 ? resolve(JSON.parse(xhr.responseText).secure_url) : reject(new Error('Upload failed'));
       xhr.onerror = () => reject(new Error('Network error'));
       xhr.send(formData);
     });
   };
 
-  // --- Send text message ---
+  // --- Send Text ---
   const handleSendMessage = async (text: string) => {
     if (!text.trim() || !auth.currentUser) return;
-
     if (editingMessage) {
       await updateDoc(doc(db, 'groups', GROUP_ID, 'messages', editingMessage.id), { content: text, isEdited: true });
       setEditingMessage(null);
@@ -137,15 +128,13 @@ const ChatScreen: React.FC<Props> = ({ onBack, onSettings, hasPlayer, tracks, on
       reactions: [],
       ...(replyingTo ? { replyTo: { id: replyingTo.id, senderName: replyingTo.senderName, content: replyingTo.content, type: replyingTo.type } } : {})
     };
-
     setReplyingTo(null);
     await addDoc(collection(db, 'groups', GROUP_ID, 'messages'), newMessage);
   };
 
-  // --- Send media ---
+  // --- Send Media ---
   const handleSendMedia = async (files: File[], type: 'image' | 'video' | 'audio') => {
     if (!auth.currentUser || files.length === 0) return;
-
     const timestamp = Date.now();
     const tempId = `optimistic-${timestamp}`;
     const localPreviews = files.map(f => URL.createObjectURL(f));
@@ -171,18 +160,17 @@ const ChatScreen: React.FC<Props> = ({ onBack, onSettings, hasPlayer, tracks, on
       const uploadedUrls = await Promise.all(files.map(file => uploadToCloudinary(file, (p) => {
         setOptimisticMessages(prev => prev.map(m => m.id === tempId ? { ...m, uploadProgress: p } : m));
       })));
-
       const finalMessage: Omit<Message, 'id'> = { ...optimisticMsg, content: uploadedUrls[0], attachments: uploadedUrls, status: 'sent', uploadProgress: 100 };
       const { status, uploadProgress, id, ...dbMessage } = finalMessage as any;
       await addDoc(collection(db, 'groups', GROUP_ID, 'messages'), dbMessage);
-    } catch (error) {
-      console.error("Media upload error:", error);
+    } catch (err) {
+      console.error(err);
       setOptimisticMessages(prev => prev.filter(m => m.id !== tempId));
       alert("Failed to send media.");
     }
   };
 
-  // --- Send track message ---
+  // --- Send Track ---
   const handleSendTrack = async (track: Track) => {
     if (!auth.currentUser) return;
     const newMessage: Omit<Message, 'id'> = {
@@ -197,24 +185,20 @@ const ChatScreen: React.FC<Props> = ({ onBack, onSettings, hasPlayer, tracks, on
     await addDoc(collection(db, 'groups', GROUP_ID, 'messages'), newMessage);
   };
 
-  // --- Open message menu ---
+  // --- Message menu ---
   const handleOpenMenu = (e: React.MouseEvent | React.TouchEvent, msg: Message) => {
     if (msg.id.startsWith('optimistic-')) return;
     e.preventDefault();
-
     const clientX = 'touches' in e ? e.touches[0].clientX : (e as React.MouseEvent).clientX;
     const clientY = 'touches' in e ? e.touches[0].clientY : (e as React.MouseEvent).clientY;
-
     const menuWidth = 224;
     const x = Math.min(clientX, window.innerWidth - menuWidth - 20);
     const y = Math.min(clientY, window.innerHeight - 300);
-
     setMenuPosition({ x, y });
     setSelectedMessage(msg);
     setMenuOpen(true);
   };
 
-  // --- Add/Remove reaction ---
   const handleReaction = async (emoji: string) => {
     if (!selectedMessage) return;
     const msgRef = doc(db, 'groups', GROUP_ID, 'messages', selectedMessage.id);
@@ -226,13 +210,12 @@ const ChatScreen: React.FC<Props> = ({ onBack, onSettings, hasPlayer, tracks, on
 
   const headerStickyTop = hasPlayer ? 'top-[72px]' : 'top-0';
   const mainContentPadding = hasPlayer ? 'pt-[144px]' : 'pt-[72px]';
-
   const combinedMessages = [...messages, ...optimisticMessages].sort((a, b) => a.timestamp - b.timestamp);
 
   return (
     <div className="flex flex-col h-screen w-full bg-[#050505] overflow-hidden">
       {/* Header */}
-      <header className={`fixed left-0 right-0 h-[72px] z-[90] glass bg-black/60 border-b border-white/5 flex items-center justify-between px-6 backdrop-blur-[40px] transition-all duration-500 ${headerStickyTop}`}>
+      <header className={`fixed left-0 right-0 h-[72px] z-[90] glass bg-black/60 border-b border-white/5 flex items-center justify-between px-6 backdrop-blur-[40px] ${headerStickyTop}`}>
         <div className="flex items-center gap-4">
           <button onClick={onBack} className="p-2 -ml-2 rounded-full hover:bg-white/10 text-white/70 transition-colors"><ChevronLeft size={24} /></button>
           <div className="flex items-center gap-3 cursor-pointer" onClick={onSettings}>
@@ -250,12 +233,12 @@ const ChatScreen: React.FC<Props> = ({ onBack, onSettings, hasPlayer, tracks, on
       </header>
 
       {/* Messages */}
-      <div ref={scrollRef} className={`flex-1 overflow-y-auto no-scrollbar scroll-smooth space-y-6 pb-24 px-4 transition-all duration-500 ${mainContentPadding}`}>
+      <div ref={scrollRef} className={`flex-1 overflow-y-auto no-scrollbar scroll-smooth space-y-6 pb-24 px-4 ${mainContentPadding}`}>
         {combinedMessages.map((msg, idx) => (
-          <MessageBubble 
-            key={msg.id} 
-            message={msg} 
-            isMe={msg.senderId === auth.currentUser?.uid} 
+          <MessageBubble
+            key={msg.id}
+            message={msg}
+            isMe={msg.senderId === auth.currentUser?.uid}
             showAvatar={idx === 0 || combinedMessages[idx-1].senderId !== msg.senderId}
             onOpenMenu={handleOpenMenu}
             onMediaClick={(url, all) => { setViewerItems(all); setViewerIndex(all.findIndex(i => i.url === url)); setViewerOpen(true); }}
@@ -274,15 +257,15 @@ const ChatScreen: React.FC<Props> = ({ onBack, onSettings, hasPlayer, tracks, on
             </div>
           )}
         </AnimatePresence>
-        <ChatInput 
-          onSend={handleSendMessage} 
-          onSendMedia={handleSendMedia} 
+        <ChatInput
+          onSend={handleSendMessage}
+          onSendMedia={handleSendMedia}
           onSendTrack={handleSendTrack}
           libraryTracks={tracks}
-          replyingTo={replyingTo} 
-          onCancelReply={() => setReplyingTo(null)} 
-          editingMessage={editingMessage} 
-          onCancelEdit={() => setEditingMessage(null)} 
+          replyingTo={replyingTo}
+          onCancelReply={() => setReplyingTo(null)}
+          editingMessage={editingMessage}
+          onCancelEdit={() => setEditingMessage(null)}
         />
       </div>
 
