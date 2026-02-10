@@ -1,7 +1,8 @@
 import React, { useRef, memo } from 'react';
-import { motion, AnimatePresence } from 'framer-motion';
+import { motion } from 'framer-motion';
 import { Message, Track } from '../types';
-import { Play, CheckCheck } from 'lucide-react';
+import { Play, CheckCheck, Reply } from 'lucide-react';
+import { useMotionValue, useTransform, useAnimation, PanInfo } from 'framer-motion';
 
 interface Props {
   message: Message;
@@ -10,6 +11,7 @@ interface Props {
   onOpenMenu?: (e: React.MouseEvent | React.TouchEvent, message: Message) => void;
   onMediaClick?: (url: string, allMedia: {url: string, type: 'image' | 'video'}[]) => void;
   onSelectTrack?: (track: Track) => void;
+  onReply?: (message: Message) => void;
 }
 
 const messageVariants = {
@@ -20,12 +22,64 @@ const messageVariants = {
   }
 };
 
-const MessageBubble: React.FC<Props> = ({ message, isMe, showAvatar, onOpenMenu, onMediaClick, onSelectTrack }) => {
+const SwipeableWrapper: React.FC<{
+  children: React.ReactNode;
+  isMe: boolean;
+  onReply?: () => void;
+}> = ({ children, isMe, onReply }) => {
+  const controls = useAnimation();
+  const x = useMotionValue(0);
+  const isDragging = useRef(false);
+
+  const dragThreshold = 60;
+  const dragConstraints = isMe ? { left: -80, right: 0 } : { left: 0, right: 80 };
+  const inputMap = isMe ? [-dragThreshold, -20] : [20, dragThreshold];
+  const opacity = useTransform(x, inputMap, [1, 0]);
+  const scale = useTransform(x, inputMap, [1.2, 0.7]);
+  const rotate = useTransform(x, inputMap, isMe ? [-180, 0] : [0, 180]);
+
+  const handleDragEnd = async (_: any, info: PanInfo) => {
+    isDragging.current = false;
+    const offset = info.offset.x;
+    if ((!isMe && offset > dragThreshold) || (isMe && offset < -dragThreshold)) {
+      onReply?.();
+      if (typeof navigator !== 'undefined' && navigator.vibrate) navigator.vibrate(40);
+    }
+    await controls.start({ x: 0, transition: { type: 'spring', stiffness: 400, damping: 35 } });
+  };
+
+  return (
+    <div className={`relative w-full flex items-center ${isMe ? 'justify-end' : 'justify-start'} py-1 group`}>
+      {/* Swipe reply icon */}
+      <div className={`absolute flex items-center justify-center pointer-events-none ${isMe ? 'right-6' : 'left-6'}`}>
+        <motion.div
+          style={{ opacity, scale, rotate }}
+          className="w-9 h-9 rounded-full bg-blue-500/20 backdrop-blur-md flex items-center justify-center text-blue-400 border border-blue-500/20"
+        >
+          <Reply size={18} strokeWidth={2.5} />
+        </motion.div>
+      </div>
+
+      <motion.div
+        drag="x"
+        dragConstraints={dragConstraints}
+        dragElastic={0.1}
+        onDragStart={() => { isDragging.current = true; }}
+        onDragEnd={handleDragEnd}
+        animate={controls}
+        style={{ x, touchAction: 'pan-y' }}
+        className="z-10 relative max-w-[88%] will-change-transform"
+      >
+        {children}
+      </motion.div>
+    </div>
+  );
+};
+
+const MessageBubble: React.FC<Props> = ({ message, isMe, showAvatar, onOpenMenu, onMediaClick, onSelectTrack, onReply }) => {
   const longPressTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const isSending = message.status === 'sending';
   const isText = message.type === 'text' || message.isUnsent;
-
-  // Extract First Name only
   const firstName = message.senderName ? message.senderName.split(' ')[0] : 'User';
 
   const handleTouchStart = (e: React.TouchEvent) => {
@@ -35,7 +89,6 @@ const MessageBubble: React.FC<Props> = ({ message, isMe, showAvatar, onOpenMenu,
       onOpenMenu(e, message);
     }, 450);
   };
-
   const handleTouchEnd = () => {
     if (longPressTimer.current) clearTimeout(longPressTimer.current);
   };
@@ -77,63 +130,63 @@ const MessageBubble: React.FC<Props> = ({ message, isMe, showAvatar, onOpenMenu,
   };
 
   return (
-    <motion.div 
-      variants={messageVariants}
-      initial="initial"
-      animate="animate"
-      style={{ willChange: 'transform, opacity' }}
-      className={`flex flex-col ${isMe ? 'items-end' : 'items-start'} mb-1 w-full px-3 group`}
-      onTouchStart={handleTouchStart}
-      onTouchEnd={handleTouchEnd}
-      onContextMenu={(e) => { e.preventDefault(); onOpenMenu?.(e, message); }}
-    >
-      {/* Display First Name for others */}
-      {!isMe && showAvatar && (
-        <span className="text-[10px] font-bold text-white/20 uppercase tracking-[0.15em] mb-1 ml-10">
-          {firstName}
-        </span>
-      )}
+    <SwipeableWrapper isMe={isMe} onReply={() => onReply?.(message)}>
+      <motion.div 
+        variants={messageVariants}
+        initial="initial"
+        animate="animate"
+        style={{ willChange: 'transform, opacity' }}
+        className={`flex flex-col ${isMe ? 'items-end' : 'items-start'} mb-1 w-full px-3 group`}
+        onTouchStart={handleTouchStart}
+        onTouchEnd={handleTouchEnd}
+        onContextMenu={(e) => { e.preventDefault(); onOpenMenu?.(e, message); }}
+      >
+        {!isMe && showAvatar && (
+          <span className="text-[10px] font-bold text-white/20 uppercase tracking-[0.15em] mb-1 ml-10">{firstName}</span>
+        )}
 
-      <div className={`flex gap-2 max-w-[88%] ${isMe ? 'flex-row-reverse' : 'flex-row'}`}>
-        {!isMe && showAvatar ? (
-          <div className="w-8 h-8 rounded-full border border-white/10 shrink-0 self-end mb-1 overflow-hidden shadow-md">
-            <img src={message.senderAvatar} className="w-full h-full object-cover" alt="" />
-          </div>
-        ) : !isMe && <div className="w-8" />}
+        <div className={`flex gap-2 max-w-[88%] ${isMe ? 'flex-row-reverse' : 'flex-row'}`}>
+          {!isMe && showAvatar ? (
+            <div className="w-8 h-8 rounded-full border border-white/10 shrink-0 self-end mb-1 overflow-hidden shadow-md">
+              <img src={message.senderAvatar} className="w-full h-full object-cover" alt="" />
+            </div>
+          ) : !isMe && <div className="w-8" />}
 
-        <div className={`flex flex-col ${isMe ? 'items-end' : 'items-start'}`}>
-          <div className={`
-            relative transition-all duration-300
-            ${isText 
-              ? `px-4 py-2.5 backdrop-blur-3xl border shadow-xl
-                 ${isMe 
-                   ? 'bg-blue-600/15 border-blue-500/20 rounded-[22px] rounded-tr-[4px]' 
-                   : 'bg-white/[0.08] border-white/10 rounded-[22px] rounded-tl-[4px]'}`
-              : 'p-0 bg-transparent border-none'
-            }
-          `}>
-            {renderContent()}
-          </div>
+          <div className={`flex flex-col ${isMe ? 'items-end' : 'items-start'}`}>
+            <div className={`
+              relative transition-all duration-300
+              ${isText 
+                ? `px-4 py-2.5 backdrop-blur-3xl border shadow-xl
+                   ${isMe 
+                     ? 'bg-blue-600/15 border-blue-500/20 rounded-[22px] rounded-tr-[4px]' 
+                     : 'bg-white/[0.08] border-white/10 rounded-[22px] rounded-tl-[4px]'}`
+                : 'p-0 bg-transparent border-none'
+              }
+            `}>
+              {renderContent()}
+            </div>
 
-          {/* HIDDEN TIME: Shows on Group Hover/Tap */}
-          <div className={`
-            flex items-center gap-1.5 mt-1 transition-all duration-300 ease-out
-            opacity-0 translate-y-[-5px] group-hover:opacity-40 group-hover:translate-y-0
-            ${isMe ? 'justify-end' : 'justify-start'} ${!isText ? 'px-1' : ''}
-          `}>
-            <span className="text-[9px] font-bold tabular-nums">
-              {new Date(message.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-            </span>
-            {isMe && !isSending && (
-              <CheckCheck size={10} className={isText ? "text-blue-400" : "text-white/60"} />
-            )}
+            <div className={`
+              flex items-center gap-1.5 mt-1 transition-all duration-300 ease-out
+              opacity-0 translate-y-[-5px] group-hover:opacity-40 group-hover:translate-y-0
+              ${isMe ? 'justify-end' : 'justify-start'} ${!isText ? 'px-1' : ''}
+            `}>
+              <span className="text-[9px] font-bold tabular-nums"> 
+                {new Date(message.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+              </span>
+              {isMe && !isSending && (
+                <CheckCheck size={10} className={isText ? "text-blue-400" : "text-white/60"} />
+              )}
+            </div>
           </div>
         </div>
-      </div>
-    </motion.div>
+      </motion.div>
+    </SwipeableWrapper>
   );
 };
 
-export default memo(MessageBubble, (p, n) => {
-  return p.message.id === n.message.id && p.message.status === n.message.status && p.showAvatar === n.showAvatar;
+export default memo(MessageBubble, (prev, next) => {
+  return prev.message.id === next.message.id 
+    && prev.message.status === next.message.status 
+    && prev.showAvatar === next.showAvatar;
 });
