@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { MoreVertical, ChevronLeft, Copy, Edit2, Trash2, X, Reply } from 'lucide-react';
@@ -10,6 +9,9 @@ import MessageBubble from '../components/MessageBubble';
 import ChatInput from '../components/ChatInput';
 import MediaViewer from '../components/MediaViewer';
 import TypingIndicator from '../components/TypingIndicator';
+
+// --- NEW IMPORT ---
+import SwipeableMessage from '../components/SwipeableMessage'; 
 
 interface Props {
   onBack: () => void;
@@ -283,17 +285,29 @@ const ChatScreen: React.FC<Props> = ({ onBack, onSettings, hasPlayer, tracks, on
 
       <div ref={scrollRef} className={`flex-1 overflow-y-auto no-scrollbar scroll-smooth space-y-6 pb-24 px-4 transition-all duration-500 ${mainContentPadding}`}>
         <div className="pt-4" />
-        {combinedMessages.map((msg, idx) => (
-          <MessageBubble 
-            key={msg.id} 
-            message={msg} 
-            isMe={msg.senderId === auth.currentUser?.uid} 
-            showAvatar={idx === 0 || combinedMessages[idx-1].senderId !== msg.senderId}
-            onOpenMenu={handleOpenMenu}
-            onMediaClick={(url, all) => { setViewerItems(all); setViewerIndex(all.findIndex(i => i.url === url)); setViewerOpen(true); }}
-            onSelectTrack={onSelectTrack}
-          />
-        ))}
+        
+        {/* --- MESSAGES LOOP WITH SWIPEABLE WRAPPER --- */}
+        {combinedMessages.map((msg, idx) => {
+          const isMe = msg.senderId === auth.currentUser?.uid;
+          
+          return (
+            <SwipeableMessage 
+              key={msg.id} 
+              isMe={isMe} 
+              onReply={() => setReplyingTo(msg)}
+            >
+              <MessageBubble 
+                message={msg} 
+                isMe={isMe} 
+                showAvatar={idx === 0 || combinedMessages[idx-1].senderId !== msg.senderId}
+                onOpenMenu={handleOpenMenu}
+                onMediaClick={(url, all) => { setViewerItems(all); setViewerIndex(all.findIndex(i => i.url === url)); setViewerOpen(true); }}
+                onSelectTrack={onSelectTrack}
+              />
+            </SwipeableMessage>
+          );
+        })}
+
       </div>
 
       <div className="absolute bottom-0 left-0 right-0 z-20 bg-gradient-to-t from-black via-black/90 to-transparent flex flex-col items-center">
