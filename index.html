@@ -1,125 +1,190 @@
 <!DOCTYPE html>
 <html lang="en">
-  <head>
-    <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
-    <title>MS Music</title>
-    <script src="https://cdn.tailwindcss.com"></script>
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Outfit:wght@300;400;600;700;800&display=swap" rel="stylesheet">
-    <style>
-      :root {
-        --ease-out-expo: cubic-bezier(0.16, 1, 0.3, 1);
-        --ease-in-out-circ: cubic-bezier(0.85, 0, 0.15, 1);
-      }
+<head>
+  <meta charset="UTF-8" />
 
-      body {
-        margin: 0;
-        padding: 0;
-        background-color: #020202;
-        font-family: 'Inter', sans-serif;
-        color: white;
-        overflow: hidden;
-        -webkit-font-smoothing: antialiased;
-        -moz-osx-font-smoothing: grayscale;
-        perspective: 1200px;
-        overscroll-behavior: none;
-      }
-      h1, h2, h3, .font-outfit {
-        font-family: 'Outfit', sans-serif;
-      }
-      
-      /* Cinematic Glassmorphism - Optimized for Performance */
+  <!-- Proper responsive viewport -->
+  <meta
+    name="viewport"
+    content="width=device-width, initial-scale=1.0, viewport-fit=cover"
+  />
+
+  <title>MS Music</title>
+
+  <!-- Tailwind CDN -->
+  <script src="https://cdn.tailwindcss.com"></script>
+
+  <!-- Fonts -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link
+    href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Outfit:wght@300;400;600;700;800&display=swap"
+    rel="stylesheet"
+  />
+
+  <style>
+    :root {
+      --ease-out-expo: cubic-bezier(0.16, 1, 0.3, 1);
+      --ease-in-out-circ: cubic-bezier(0.85, 0, 0.15, 1);
+    }
+
+    /* -------------------- GLOBAL -------------------- */
+    html {
+      font-size: clamp(14px, 1.2vw, 16px);
+      height: 100%;
+    }
+
+    body {
+      margin: 0;
+      padding: 0;
+      min-height: 100vh;
+      width: 100%;
+
+      background-color: #020202;
+      color: #fff;
+      font-family: 'Inter', sans-serif;
+
+      overflow-x: hidden;
+      overflow-y: auto;
+
+      -webkit-font-smoothing: antialiased;
+      -moz-osx-font-smoothing: grayscale;
+
+      overscroll-behavior-y: contain;
+      padding-bottom: env(safe-area-inset-bottom);
+    }
+
+    #root {
+      min-height: 100vh;
+      width: 100%;
+      display: flex;
+      flex-direction: column;
+    }
+
+    h1, h2, h3, .font-outfit {
+      font-family: 'Outfit', sans-serif;
+    }
+
+    h1 { font-size: clamp(1.8rem, 4vw, 3rem); }
+    h2 { font-size: clamp(1.4rem, 3vw, 2.2rem); }
+    h3 { font-size: clamp(1.1rem, 2vw, 1.6rem); }
+
+    /* -------------------- GLASS UI -------------------- */
+    .glass {
+      background: rgba(255, 255, 255, 0.04);
+      backdrop-filter: blur(28px) saturate(160%);
+      -webkit-backdrop-filter: blur(28px) saturate(160%);
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      box-shadow: 0 10px 40px rgba(0, 0, 0, 0.6);
+      transform: translateZ(0);
+      will-change: transform, opacity;
+    }
+
+    .glass-high {
+      background: rgba(255, 255, 255, 0.07);
+      backdrop-filter: blur(50px) saturate(220%);
+      -webkit-backdrop-filter: blur(50px) saturate(220%);
+      border: 1px solid rgba(255, 255, 255, 0.15);
+      transform: translateZ(0);
+      will-change: transform, opacity;
+    }
+
+    /* Mobile optimized glass */
+    @media (max-width: 768px) {
       .glass {
-        background: rgba(255, 255, 255, 0.03);
-        backdrop-filter: blur(25px) saturate(160%);
-        -webkit-backdrop-filter: blur(25px) saturate(160%);
-        border: 1px solid rgba(255, 255, 255, 0.08);
-        box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.6);
-        transform: translateZ(0);
-        will-change: transform, opacity;
+        backdrop-filter: blur(14px) saturate(130%);
+        -webkit-backdrop-filter: blur(14px) saturate(130%);
       }
-      
+
       .glass-high {
-        background: rgba(255, 255, 255, 0.07);
-        backdrop-filter: blur(50px) saturate(220%);
-        -webkit-backdrop-filter: blur(50px) saturate(220%);
-        border: 1px solid rgba(255, 255, 255, 0.15);
-        transform: translateZ(0);
-        will-change: transform, opacity;
+        backdrop-filter: blur(22px) saturate(160%);
+        -webkit-backdrop-filter: blur(22px) saturate(160%);
       }
+    }
 
-      .text-glow {
-        text-shadow: 0 0 15px rgba(255, 255, 255, 0.4), 0 0 30px rgba(59, 130, 246, 0.3);
-      }
-      
-      /* Hide Scrollbars but keep functionality */
-      .no-scrollbar::-webkit-scrollbar {
-        display: none;
-      }
-      .no-scrollbar {
-        -ms-overflow-style: none;
-        scrollbar-width: none;
-      }
+    /* -------------------- EFFECTS -------------------- */
+    .text-glow {
+      text-shadow:
+        0 0 12px rgba(255, 255, 255, 0.35),
+        0 0 28px rgba(59, 130, 246, 0.25);
+    }
 
-      * {
-        -webkit-tap-highlight-color: transparent;
-        user-select: none;
-        box-sizing: border-box;
-      }
-      
-      input, textarea {
-        user-select: text;
-      }
+    .vinyl-shine {
+      background: radial-gradient(
+        circle at 50% 50%,
+        transparent 40%,
+        rgba(255,255,255,0.06) 45%,
+        transparent 55%
+      );
+      background-size: 200% 200%;
+    }
 
-      .will-change-transform {
-        will-change: transform;
-        transform: translateZ(0);
-      }
+    /* -------------------- UTILITIES -------------------- */
+    .no-scrollbar::-webkit-scrollbar {
+      display: none;
+    }
 
-      .perspective-1200 {
-        perspective: 1200px;
-      }
-      
-      .transform-style-3d {
-        transform-style: preserve-3d;
-      }
-      
-      /* 3D Vinyl Shine */
-      .vinyl-shine {
-        background: radial-gradient(circle at 50% 50%, transparent 40%, rgba(255,255,255,0.05) 45%, transparent 50%);
-        background-size: 200% 200%;
-      }
+    .no-scrollbar {
+      -ms-overflow-style: none;
+      scrollbar-width: none;
+    }
 
-      /* Smooth Scroll behavior for internal containers */
-      .scroll-smooth {
-        scroll-behavior: smooth;
-      }
-    </style>
+    .fullscreen-safe {
+      min-height: 100dvh;
+      max-height: 100vh;
+    }
+
+    .perspective-1200 {
+      perspective: 1200px;
+    }
+
+    .transform-style-3d {
+      transform-style: preserve-3d;
+    }
+
+    * {
+      box-sizing: border-box;
+      -webkit-tap-highlight-color: transparent;
+      user-select: none;
+    }
+
+    input, textarea {
+      user-select: text;
+    }
+
+    button, a {
+      touch-action: manipulation;
+    }
+  </style>
+
+  <!-- Import Map -->
   <script type="importmap">
-{
-  "imports": {
-    "react": "https://esm.sh/react@18.2.0",
-    "react/": "https://esm.sh/react@18.2.0/",
-    "react-dom": "https://esm.sh/react-dom@18.2.0",
-    "react-dom/": "https://esm.sh/react-dom@18.2.0/",
-    "react-dom/client": "https://esm.sh/react-dom@18.2.0/client",
-    "lucide-react": "https://esm.sh/lucide-react@0.344.0?external=react",
-    "framer-motion": "https://esm.sh/framer-motion@11.0.8?external=react,react-dom",
-    "firebase/app": "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js",
-    "firebase/auth": "https://www.gstatic.com/firebasejs/10.8.0/firebase-auth.js",
-    "firebase/firestore": "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js",
-    "firebase/storage": "https://www.gstatic.com/firebasejs/10.8.0/firebase-storage.js",
-    "firebase/analytics": "https://www.gstatic.com/firebasejs/10.8.0/firebase-analytics.js",
-    "firebase/": "https://esm.sh/firebase@^12.9.0/"
+  {
+    "imports": {
+      "react": "https://esm.sh/react@18.2.0",
+      "react/": "https://esm.sh/react@18.2.0/",
+      "react-dom": "https://esm.sh/react-dom@18.2.0",
+      "react-dom/": "https://esm.sh/react-dom@18.2.0/",
+      "react-dom/client": "https://esm.sh/react-dom@18.2.0/client",
+      "lucide-react": "https://esm.sh/lucide-react@0.344.0?external=react",
+      "framer-motion": "https://esm.sh/framer-motion@11.0.8?external=react,react-dom",
+      "firebase/app": "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js",
+      "firebase/auth": "https://www.gstatic.com/firebasejs/10.8.0/firebase-auth.js",
+      "firebase/firestore": "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js",
+      "firebase/storage": "https://www.gstatic.com/firebasejs/10.8.0/firebase-storage.js",
+      "firebase/analytics": "https://www.gstatic.com/firebasejs/10.8.0/firebase-analytics.js",
+      "firebase/": "https://esm.sh/firebase@^12.9.0/"
+    }
   }
-}
-</script>
-<link rel="stylesheet" href="/index.css">
+  </script>
+
+  <link rel="stylesheet" href="/index.css" />
 </head>
-  <body>
-    <div id="root"></div>
+
+<body>
+  <div id="root"></div>
+
+  <!-- React entry -->
   <script type="module" src="/index.tsx"></script>
 </body>
 </html>
