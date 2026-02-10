@@ -19,15 +19,10 @@ const messageVariants = {
 };
 
 // --- Swipeable wrapper for reply gesture ---
-const SwipeableWrapper: React.FC<{
-  children: React.ReactNode;
-  isMe: boolean;
-  onReply?: () => void;
-}> = ({ children, isMe, onReply }) => {
+const SwipeableWrapper: React.FC<{ children: React.ReactNode; isMe: boolean; onReply?: () => void; }> = ({ children, isMe, onReply }) => {
   const controls = useAnimation();
   const x = useMotionValue(0);
   const isDragging = useRef(false);
-
   const dragThreshold = 60;
   const dragConstraints = isMe ? { left: -80, right: 0 } : { left: 0, right: 80 };
   const inputMap = isMe ? [-dragThreshold, -20] : [20, dragThreshold];
@@ -40,14 +35,14 @@ const SwipeableWrapper: React.FC<{
     const offset = info.offset.x;
     if ((!isMe && offset > dragThreshold) || (isMe && offset < -dragThreshold)) {
       onReply?.();
-      if (typeof navigator !== 'undefined' && navigator.vibrate) navigator.vibrate(40);
+      if (navigator.vibrate) navigator.vibrate(40);
     }
     await controls.start({ x: 0, transition: { type: 'spring', stiffness: 400, damping: 35 } });
   };
 
   return (
     <div className={`relative w-full flex items-center ${isMe ? 'justify-end' : 'justify-start'} py-0.5`}>
-      {/* Swipe reply icon */}
+      {/* Reply icon */}
       <div className={`absolute flex items-center justify-center pointer-events-none ${isMe ? 'right-3' : 'left-3'}`}>
         <motion.div
           style={{ opacity, scale, rotate }}
@@ -73,15 +68,7 @@ const SwipeableWrapper: React.FC<{
   );
 };
 
-const MessageBubble: React.FC<Props> = ({
-  message,
-  isMe,
-  showAvatar,
-  onOpenMenu,
-  onMediaClick,
-  onSelectTrack,
-  onReply,
-}) => {
+const MessageBubble: React.FC<Props> = ({ message, isMe, showAvatar, onOpenMenu, onMediaClick, onSelectTrack, onReply }) => {
   const longPressTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const isSending = message.status === 'sending';
   const isText = message.type === 'text' || message.isUnsent;
@@ -90,66 +77,59 @@ const MessageBubble: React.FC<Props> = ({
   const handleTouchStart = (e: React.TouchEvent) => {
     if (!onOpenMenu || isSending) return;
     longPressTimer.current = setTimeout(() => {
-      if (typeof navigator !== 'undefined' && navigator.vibrate) navigator.vibrate(40);
+      navigator.vibrate?.(40);
       onOpenMenu(e, message);
     }, 450);
   };
 
-  const handleTouchEnd = () => {
-    if (longPressTimer.current) clearTimeout(longPressTimer.current);
-  };
+  const handleTouchEnd = () => { if (longPressTimer.current) clearTimeout(longPressTimer.current); };
 
   const renderContent = () => {
     if (message.isUnsent) return <p className="text-[13px] text-white/30 italic">Message removed</p>;
 
-    return (
-      <div className="flex flex-col gap-0.5">
-        {/* --- Reply preview --- */}
-        {message.replyTo && (
-          <div className="px-2 py-1 bg-white/10 border-l-2 border-blue-400 rounded-xl mb-0.5">
-            <p className="text-[11px] text-white/50 truncate">Replying to {message.replyTo.senderName}:</p>
-            <p className="text-[12px] text-white/70 truncate">{message.replyTo.content}</p>
-          </div>
-        )}
+    if (message.type === 'text' || message.isUnsent) {
+      return (
+        <p className="text-[14px] leading-snug font-medium text-white/95">
+          {message.content}
+        </p>
+      );
+    }
 
-        {/* --- Main content --- */}
-        {message.type === 'text' || message.isUnsent ? (
-          <p className="text-[14px] leading-snug font-medium text-white/95">{message.content}</p>
-        ) : message.type === 'music' ? (
-          (() => {
-            try {
-              const track = JSON.parse(message.content) as Track;
-              return (
-                <div
-                  onClick={() => onSelectTrack?.(track)}
-                  className="flex items-center gap-2 p-1.5 bg-white/[0.05] border border-white/5 rounded-xl cursor-pointer min-w-[200px] active:scale-95 transition-transform"
-                >
-                  <img src={track.albumArt} className="w-10 h-10 rounded-lg object-cover shadow-lg" loading="lazy" />
-                  <div className="flex-1 min-w-0">
-                    <h4 className="text-[13px] font-bold text-white truncate">{track.title}</h4>
-                    <p className="text-[10px] text-white/40 truncate uppercase tracking-widest">{track.artist}</p>
-                  </div>
-                </div>
-              );
-            } catch {
-              return null;
-            }
-          })()
-        ) : message.type === 'image' || message.type === 'video' ? (
+    if (message.type === 'music') {
+      try {
+        const track = JSON.parse(message.content) as Track;
+        return (
           <div
-            onClick={() => onMediaClick?.(message.content, [])}
-            className="relative aspect-square w-[200px] rounded-lg overflow-hidden bg-white/[0.02] shadow-2xl"
+            onClick={() => onSelectTrack?.(track)}
+            className="flex items-center gap-2 p-2 bg-white/5 border border-white/5 rounded-xl cursor-pointer min-w-[200px] active:scale-95 transition-transform"
           >
-            {message.type === 'video' ? (
-              <video src={message.content} className="w-full h-full object-cover" muted playsInline />
-            ) : (
-              <img src={message.content} className="w-full h-full object-cover" loading="lazy" />
-            )}
-            {isSending && <div className="absolute inset-0 bg-black/50 flex items-center justify-center animate-pulse" />}
+            <img src={track.albumArt} className="w-10 h-10 rounded-lg object-cover shadow-lg" loading="lazy" />
+            <div className="flex-1 min-w-0">
+              <h4 className="text-[13px] font-bold text-white truncate">{track.title}</h4>
+              <p className="text-[10px] text-white/40 truncate uppercase tracking-widest">{track.artist}</p>
+            </div>
           </div>
-        ) : null}
-      </div>
-    );
+        );
+      } catch { return null; }
+    }
+
+    if (message.type === 'image' || message.type === 'video') {
+      return (
+        <div
+          onClick={() => onMediaClick?.(message.content, [])}
+          className="relative aspect-square w-[200px] rounded-xl overflow-hidden bg-white/[0.02] shadow-2xl"
+        >
+          {message.type === 'video' ? (
+            <video src={message.content} className="w-full h-full object-cover" muted playsInline />
+          ) : (
+            <img src={message.content} className="w-full h-full object-cover" loading="lazy" />
+          )}
+          {isSending && <div className="absolute inset-0 bg-black/50 flex items-center justify-center animate-pulse" />}
+        </div>
+      );
+    }
+
+    return null;
   };
 
   return (
@@ -164,7 +144,6 @@ const MessageBubble: React.FC<Props> = ({
         onTouchEnd={handleTouchEnd}
         onContextMenu={(e) => { e.preventDefault(); onOpenMenu?.(e, message); }}
       >
-        {/* --- Sender avatar --- */}
         {!isMe && showAvatar && (
           <span className="text-[10px] font-bold text-white/20 uppercase tracking-[0.15em] mb-0.5 ml-1">{firstName}</span>
         )}
@@ -179,18 +158,17 @@ const MessageBubble: React.FC<Props> = ({
           <div className={`flex flex-col ${isMe ? 'items-end' : 'items-start'}`}>
             <div
               className={`
-                relative px-2 py-1 rounded-lg
+                relative px-3 py-2 rounded-2xl
                 ${isText
                   ? isMe
-                    ? 'bg-blue-600/90 rounded-tr-[4px]'
-                    : 'bg-white/10 rounded-tl-[4px]'
+                    ? 'bg-gradient-to-br from-blue-500/80 to-blue-600/90 text-white shadow-[0_4px_15px_rgba(0,0,0,0.2)]'
+                    : 'bg-gradient-to-br from-gray-700/70 to-gray-800/80 text-white shadow-[0_2px_12px_rgba(0,0,0,0.15)]'
                   : 'p-0 bg-transparent'}
               `}
             >
               {renderContent()}
             </div>
 
-            {/* Timestamp & check */}
             {isMe && !isSending && (
               <div className="flex items-center gap-0.5 mt-0.5 justify-end text-[8px] text-white/50">
                 <span className="tabular-nums">{new Date(message.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
@@ -204,9 +182,8 @@ const MessageBubble: React.FC<Props> = ({
   );
 };
 
-// --- Memo to optimize re-renders ---
-export default memo(MessageBubble, (prev, next) => {
-  return prev.message.id === next.message.id &&
-         prev.message.status === next.message.status &&
-         prev.showAvatar === next.showAvatar;
-});
+export default memo(MessageBubble, (prev, next) =>
+  prev.message.id === next.message.id &&
+  prev.message.status === next.message.status &&
+  prev.showAvatar === next.showAvatar
+);
