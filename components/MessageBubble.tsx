@@ -14,7 +14,7 @@ interface Props {
 }
 
 const messageVariants = {
-  initial: { opacity: 0, y: 8, scale: 0.97 },
+  initial: { opacity: 0, y: 10, scale: 0.95 },
   animate: {
     opacity: 1,
     y: 0,
@@ -23,6 +23,7 @@ const messageVariants = {
   },
 };
 
+// --- Swipeable wrapper for reply gesture ---
 const SwipeableWrapper: React.FC<{
   children: React.ReactNode;
   isMe: boolean;
@@ -36,7 +37,7 @@ const SwipeableWrapper: React.FC<{
   const dragConstraints = isMe ? { left: -80, right: 0 } : { left: 0, right: 80 };
   const inputMap = isMe ? [-dragThreshold, -20] : [20, dragThreshold];
   const opacity = useTransform(x, inputMap, [1, 0]);
-  const scale = useTransform(x, inputMap, [1.1, 0.7]);
+  const scale = useTransform(x, inputMap, [1.2, 0.7]);
   const rotate = useTransform(x, inputMap, isMe ? [-180, 0] : [0, 180]);
 
   const handleDragEnd = async (_: any, info: PanInfo) => {
@@ -44,19 +45,20 @@ const SwipeableWrapper: React.FC<{
     const offset = info.offset.x;
     if ((!isMe && offset > dragThreshold) || (isMe && offset < -dragThreshold)) {
       onReply?.();
-      navigator.vibrate?.(40);
+      if (typeof navigator !== 'undefined' && navigator.vibrate) navigator.vibrate(40);
     }
     await controls.start({ x: 0, transition: { type: 'spring', stiffness: 400, damping: 35 } });
   };
 
   return (
     <div className={`relative w-full flex items-center ${isMe ? 'justify-end' : 'justify-start'} py-0.5 group`}>
-      <div className={`absolute flex items-center justify-center pointer-events-none ${isMe ? 'right-5' : 'left-5'}`}>
+      {/* Swipe reply icon */}
+      <div className={`absolute flex items-center justify-center pointer-events-none ${isMe ? 'right-6' : 'left-6'}`}>
         <motion.div
           style={{ opacity, scale, rotate }}
-          className="w-8 h-8 rounded-full bg-blue-500/20 backdrop-blur-md flex items-center justify-center text-blue-400 border border-blue-500/20"
+          className="w-9 h-9 rounded-full bg-blue-500/20 backdrop-blur-md flex items-center justify-center text-blue-400 border border-blue-500/20"
         >
-          <Reply size={16} strokeWidth={2.2} />
+          <Reply size={18} strokeWidth={2.5} />
         </motion.div>
       </div>
 
@@ -90,36 +92,36 @@ const MessageBubble: React.FC<Props> = ({
   const longPressTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const isSending = message.status === 'sending';
   const isText = message.type === 'text' || message.isUnsent;
-  const firstName = message.senderName?.split(' ')[0] || 'User';
+  const firstName = message.senderName ? message.senderName.split(' ')[0] : 'User';
 
   const handleTouchStart = (e: React.TouchEvent) => {
     if (!onOpenMenu || isSending) return;
     longPressTimer.current = setTimeout(() => {
-      navigator.vibrate?.(40);
+      if (typeof navigator !== 'undefined' && navigator.vibrate) navigator.vibrate(40);
       onOpenMenu(e, message);
     }, 450);
   };
+
   const handleTouchEnd = () => {
-    longPressTimer.current && clearTimeout(longPressTimer.current);
+    if (longPressTimer.current) clearTimeout(longPressTimer.current);
   };
 
   const renderContent = () => {
-    if (message.isUnsent)
-      return <p className="text-[13px] text-white/30 italic">Message removed</p>;
+    if (message.isUnsent) return <p className="text-[13px] text-white/30 italic">Message removed</p>;
 
     return (
-      <div className="flex flex-col gap-0.5">
+      <div className="flex flex-col gap-1">
+        {/* --- Reply preview --- */}
         {message.replyTo && (
-          <div className="px-3 py-1 bg-white/10 border-l-2 border-blue-400 rounded-xl mb-1">
-            <p className="text-[11px] text-white/50 truncate">
-              Replying to {message.replyTo.senderName}:
-            </p>
+          <div className="px-3 py-2 bg-white/10 border-l-2 border-blue-400 rounded-xl mb-1">
+            <p className="text-[11px] text-white/50 truncate">Replying to {message.replyTo.senderName}:</p>
             <p className="text-[12px] text-white/70 truncate">{message.replyTo.content}</p>
           </div>
         )}
 
+        {/* --- Main content --- */}
         {message.type === 'text' || message.isUnsent ? (
-          <p className="text-[15px] leading-relaxed font-medium text-white/95">{message.content}</p>
+          <p className="text-[15px] leading-snug font-medium text-white/95">{message.content}</p>
         ) : message.type === 'music' ? (
           (() => {
             try {
@@ -127,13 +129,9 @@ const MessageBubble: React.FC<Props> = ({
               return (
                 <div
                   onClick={() => onSelectTrack?.(track)}
-                  className="flex items-center gap-2 p-2 bg-white/[0.05] border border-white/5 rounded-2xl cursor-pointer min-w-[200px] active:scale-95 transition-transform"
+                  className="flex items-center gap-3 p-2 bg-white/[0.05] border border-white/5 rounded-2xl cursor-pointer min-w-[220px] active:scale-95 transition-transform"
                 >
-                  <img
-                    src={track.albumArt}
-                    className="w-10 h-10 rounded-xl object-cover shadow-md"
-                    loading="lazy"
-                  />
+                  <img src={track.albumArt} className="w-12 h-12 rounded-xl object-cover shadow-lg" loading="lazy" />
                   <div className="flex-1 min-w-0">
                     <h4 className="text-[13px] font-bold text-white truncate">{track.title}</h4>
                     <p className="text-[10px] text-white/40 truncate uppercase tracking-widest">{track.artist}</p>
@@ -147,16 +145,14 @@ const MessageBubble: React.FC<Props> = ({
         ) : message.type === 'image' || message.type === 'video' ? (
           <div
             onClick={() => onMediaClick?.(message.content, [])}
-            className="relative aspect-square w-[240px] rounded-[20px] overflow-hidden bg-white/[0.02] shadow-xl will-change-transform"
+            className="relative aspect-square w-[260px] rounded-[24px] overflow-hidden bg-white/[0.02] shadow-2xl will-change-transform"
           >
             {message.type === 'video' ? (
               <video src={message.content} className="w-full h-full object-cover" muted playsInline />
             ) : (
               <img src={message.content} className="w-full h-full object-cover" loading="lazy" />
             )}
-            {isSending && (
-              <div className="absolute inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center animate-pulse" />
-            )}
+            {isSending && <div className="absolute inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center animate-pulse" />}
           </div>
         ) : null}
       </div>
@@ -170,7 +166,8 @@ const MessageBubble: React.FC<Props> = ({
         initial="initial"
         animate="animate"
         style={{ willChange: 'transform, opacity' }}
-        className={`flex flex-col ${isMe ? 'items-end' : 'items-start'} mb-0.5 w-full px-2 group`}
+        className={`flex flex-col ${isMe ? 'items-end' : 'items-start'}
+          ${message.replyTo ? 'mb-1' : 'mb-0.5'} w-full px-2 group`}
         onTouchStart={handleTouchStart}
         onTouchEnd={handleTouchEnd}
         onContextMenu={(e) => {
@@ -178,46 +175,44 @@ const MessageBubble: React.FC<Props> = ({
           onOpenMenu?.(e, message);
         }}
       >
+        {/* --- Sender avatar --- */}
         {!isMe && showAvatar && (
           <span className="text-[10px] font-bold text-white/20 uppercase tracking-[0.15em] mb-0.5 ml-10">{firstName}</span>
         )}
 
-        <div className={`flex gap-1.5 max-w-[88%] ${isMe ? 'flex-row-reverse' : 'flex-row'}`}>
+        <div className={`flex gap-2 max-w-[88%] ${isMe ? 'flex-row-reverse' : 'flex-row'}`}>
           {!isMe && showAvatar ? (
-            <div className="w-7 h-7 rounded-full border border-white/10 shrink-0 self-end mb-0.5 overflow-hidden shadow-sm">
+            <div className="w-8 h-8 rounded-full border border-white/10 shrink-0 self-end mb-0.5 overflow-hidden shadow-md">
               <img src={message.senderAvatar} className="w-full h-full object-cover" alt="" />
             </div>
-          ) : !isMe && <div className="w-7" />}
+          ) : !isMe && <div className="w-8" />}
 
           <div className={`flex flex-col ${isMe ? 'items-end' : 'items-start'}`}>
             <div
-              className={`relative transition-all duration-300 ${
-                isText
-                  ? `px-3 py-2 backdrop-blur-3xl border shadow-md ${
-                      isMe
-                        ? 'bg-blue-600/15 border-blue-500/20 rounded-[20px] rounded-tr-[4px]'
-                        : 'bg-white/[0.08] border-white/10 rounded-[20px] rounded-tl-[4px]'
-                    }`
-                  : 'p-0 bg-transparent border-none'
-              }`}
+              className={`
+              relative transition-all duration-300
+              ${isText
+                ? `px-4 py-2.5 backdrop-blur-3xl border shadow-xl
+                   ${isMe
+                     ? 'bg-blue-600/15 border-blue-500/20 rounded-[22px] rounded-tr-[4px]'
+                     : 'bg-white/[0.08] border-white/10 rounded-[22px] rounded-tl-[4px]'}`
+                : 'p-0 bg-transparent border-none'}
+            `}
             >
               {renderContent()}
             </div>
 
-            {/* Only add extra bottom margin if it's a reply */}
             <div
-              className={`flex items-center gap-1 mt-${
-                message.replyTo ? '1' : '0'
-              } transition-all duration-300 ease-out opacity-0 translate-y-[-3px] group-hover:opacity-40 group-hover:translate-y-0 ${
-                isMe ? 'justify-end' : 'justify-start'
-              } ${!isText ? 'px-1' : ''}`}
+              className={`
+              flex items-center gap-1.5 mt-1 transition-all duration-300 ease-out
+              opacity-0 translate-y-[-5px] group-hover:opacity-40 group-hover:translate-y-0
+              ${isMe ? 'justify-end' : 'justify-start'} ${!isText ? 'px-1' : ''}
+            `}
             >
               <span className="text-[9px] font-bold tabular-nums">
                 {new Date(message.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
               </span>
-              {isMe && !isSending && (
-                <CheckCheck size={10} className={isText ? 'text-blue-400' : 'text-white/60'} />
-              )}
+              {isMe && !isSending && <CheckCheck size={10} className={isText ? 'text-blue-400' : 'text-white/60'} />}
             </div>
           </div>
         </div>
@@ -226,10 +221,7 @@ const MessageBubble: React.FC<Props> = ({
   );
 };
 
+// --- Memo to optimize re-renders ---
 export default memo(MessageBubble, (prev, next) => {
-  return (
-    prev.message.id === next.message.id &&
-    prev.message.status === next.message.status &&
-    prev.showAvatar === next.showAvatar
-  );
+  return prev.message.id === next.message.id && prev.message.status === next.message.status && prev.showAvatar === next.showAvatar;
 });
