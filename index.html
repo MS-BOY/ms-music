@@ -1,153 +1,124 @@
+
 <!DOCTYPE html>
 <html lang="en">
-<head>
-  <meta charset="UTF-8" />
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+    <title>MS Music</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Outfit:wght@300;400;600;700;800&display=swap" rel="stylesheet">
+    <style>
+      :root {
+        --ease-out-expo: cubic-bezier(0.16, 1, 0.3, 1);
+        --ease-in-out-circ: cubic-bezier(0.85, 0, 0.15, 1);
+      }
 
-  <!-- RESPONSIVE VIEWPORT -->
-  <meta
-    name="viewport"
-    content="width=device-width, initial-scale=1, viewport-fit=cover, maximum-scale=1"
-  />
-
-  <title>MS Music</title>
-
-  <!-- PRELOAD FONTS -->
-  <link rel="preconnect" href="https://fonts.googleapis.com" />
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-  <link
-    href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Outfit:wght@400;600;700;800&display=swap"
-    rel="stylesheet"
-  />
-
-  <!-- TAILWIND CDN (SAFE) -->
-  <script src="https://cdn.tailwindcss.com"></script>
-
-  <style>
-    :root {
-      --ease-out-expo: cubic-bezier(0.16, 1, 0.3, 1);
-      --ease-in-out-circ: cubic-bezier(0.85, 0, 0.15, 1);
-    }
-
-    /* -------- GLOBAL RESET -------- */
-    * {
-      box-sizing: border-box;
-      -webkit-tap-highlight-color: transparent;
-    }
-
-    html, body {
-      width: 100%;
-      height: 100%;
-      margin: 0;
-      padding: 0;
-      background: #020202;
-      color: white;
-      font-family: 'Inter', system-ui, sans-serif;
-      overscroll-behavior: none;
-      -webkit-font-smoothing: antialiased;
-      -moz-osx-font-smoothing: grayscale;
-    }
-
-    body {
-      overflow: hidden; /* main scroll React handle করবে */
-    }
-
-    #root {
-      min-height: 100dvh;
-      width: 100%;
-      display: flex;
-      flex-direction: column;
-    }
-
-    h1, h2, h3, .font-outfit {
-      font-family: 'Outfit', sans-serif;
-    }
-
-    /* -------- PERFORMANCE GLASS (LOW END SAFE) -------- */
-    .glass {
-      background: rgba(255, 255, 255, 0.04);
-      border: 1px solid rgba(255, 255, 255, 0.08);
-      box-shadow: 0 8px 24px rgba(0, 0, 0, 0.5);
-      backdrop-filter: blur(18px);
-      -webkit-backdrop-filter: blur(18px);
-      will-change: transform, opacity;
-      transform: translateZ(0);
-    }
-
-    /* Auto disable blur on low-end devices */
-    @media (max-width: 480px) {
+      body {
+        margin: 0;
+        padding: 0;
+        background-color: #020202;
+        font-family: 'Inter', sans-serif;
+        color: white;
+        overflow: hidden;
+        -webkit-font-smoothing: antialiased;
+        -moz-osx-font-smoothing: grayscale;
+        perspective: 1200px;
+        overscroll-behavior: none;
+      }
+      h1, h2, h3, .font-outfit {
+        font-family: 'Outfit', sans-serif;
+      }
+      
+      /* Cinematic Glassmorphism - Optimized for Performance */
       .glass {
-        backdrop-filter: none;
-        -webkit-backdrop-filter: none;
-        background: rgba(255, 255, 255, 0.06);
+        background: rgba(255, 255, 255, 0.03);
+        backdrop-filter: blur(25px) saturate(160%);
+        -webkit-backdrop-filter: blur(25px) saturate(160%);
+        border: 1px solid rgba(255, 255, 255, 0.08);
+        box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.6);
+        transform: translateZ(0);
+        will-change: transform, opacity;
       }
-    }
+      
+      .glass-high {
+        background: rgba(255, 255, 255, 0.07);
+        backdrop-filter: blur(50px) saturate(220%);
+        -webkit-backdrop-filter: blur(50px) saturate(220%);
+        border: 1px solid rgba(255, 255, 255, 0.15);
+        transform: translateZ(0);
+        will-change: transform, opacity;
+      }
 
-    /* -------- TEXT & EFFECTS -------- */
-    .text-glow {
-      text-shadow:
-        0 0 10px rgba(255, 255, 255, 0.3),
-        0 0 20px rgba(59, 130, 246, 0.25);
-    }
+      .text-glow {
+        text-shadow: 0 0 15px rgba(255, 255, 255, 0.4), 0 0 30px rgba(59, 130, 246, 0.3);
+      }
+      
+      /* Hide Scrollbars but keep functionality */
+      .no-scrollbar::-webkit-scrollbar {
+        display: none;
+      }
+      .no-scrollbar {
+        -ms-overflow-style: none;
+        scrollbar-width: none;
+      }
 
-    /* -------- SCROLL PERFORMANCE -------- */
-    .no-scrollbar {
-      scrollbar-width: none;
-      -ms-overflow-style: none;
-    }
-
-    .no-scrollbar::-webkit-scrollbar {
-      display: none;
-    }
-
-    /* -------- TOUCH & INPUT -------- */
-    input, textarea {
-      user-select: text;
-    }
-
-    button {
-      touch-action: manipulation;
-    }
-
-    /* -------- SAFE 3D -------- */
-    .will-change-transform {
-      will-change: transform;
-      transform: translateZ(0);
-    }
-
-    /* -------- REDUCE MOTION (ACCESSIBILITY + LAG FIX) -------- */
-    @media (prefers-reduced-motion: reduce) {
       * {
-        animation: none !important;
-        transition: none !important;
+        -webkit-tap-highlight-color: transparent;
+        user-select: none;
+        box-sizing: border-box;
       }
-    }
-  </style>
+      
+      input, textarea {
+        user-select: text;
+      }
 
-  <!-- IMPORT MAP -->
+      .will-change-transform {
+        will-change: transform;
+        transform: translateZ(0);
+      }
+
+      .perspective-1200 {
+        perspective: 1200px;
+      }
+      
+      .transform-style-3d {
+        transform-style: preserve-3d;
+      }
+      
+      /* 3D Vinyl Shine */
+      .vinyl-shine {
+        background: radial-gradient(circle at 50% 50%, transparent 40%, rgba(255,255,255,0.05) 45%, transparent 50%);
+        background-size: 200% 200%;
+      }
+
+      /* Smooth Scroll behavior for internal containers */
+      .scroll-smooth {
+        scroll-behavior: smooth;
+      }
+    </style>
   <script type="importmap">
-  {
-    "imports": {
-      "react": "https://esm.sh/react@18.2.0",
-      "react/": "https://esm.sh/react@18.2.0/",
-      "react-dom": "https://esm.sh/react-dom@18.2.0",
-      "react-dom/": "https://esm.sh/react-dom@18.2.0/",
-      "react-dom/client": "https://esm.sh/react-dom@18.2.0/client",
-      "lucide-react": "https://esm.sh/lucide-react@0.344.0?external=react",
-      "framer-motion": "https://esm.sh/framer-motion@11.0.8?external=react,react-dom",
-      "firebase/app": "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js",
-      "firebase/auth": "https://www.gstatic.com/firebasejs/10.8.0/firebase-auth.js",
-      "firebase/firestore": "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js",
-      "firebase/storage": "https://www.gstatic.com/firebasejs/10.8.0/firebase-storage.js",
-      "firebase/analytics": "https://www.gstatic.com/firebasejs/10.8.0/firebase-analytics.js"
-    }
+{
+  "imports": {
+    "react": "https://esm.sh/react@18.2.0",
+    "react/": "https://esm.sh/react@18.2.0/",
+    "react-dom": "https://esm.sh/react-dom@18.2.0",
+    "react-dom/": "https://esm.sh/react-dom@18.2.0/",
+    "react-dom/client": "https://esm.sh/react-dom@18.2.0/client",
+    "lucide-react": "https://esm.sh/lucide-react@0.344.0?external=react",
+    "framer-motion": "https://esm.sh/framer-motion@11.0.8?external=react,react-dom",
+    "firebase/app": "https://esm.sh/firebase@10.8.0/app",
+    "firebase/auth": "https://esm.sh/firebase@10.8.0/auth",
+    "firebase/firestore": "https://esm.sh/firebase@10.8.0/firestore",
+    "firebase/storage": "https://esm.sh/firebase@10.8.0/storage",
+    "firebase/": "https://esm.sh/firebase@^12.9.0/"
   }
-  </script>
-
-  <link rel="stylesheet" href="/index.css" />
+}
+</script>
 </head>
-
-<body>
-  <div id="root"></div>
-  <script type="module" src="/index.tsx"></script>
-</body>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/index.tsx"></script>
+  </body>
 </html>
