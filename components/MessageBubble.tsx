@@ -12,43 +12,35 @@ interface Props {
   onSelectTrack?: (track: Track) => void;
 }
 
-// 1. GPU-ACCELERATED ANIMATION VARIANTS
-// Using scale and y-axis movement for the "pop-up" effect
 const messageVariants = {
-  initial: { 
-    opacity: 0, 
-    y: 15, 
-    scale: 0.92,
-    filter: 'blur(4px)' 
-  },
-  animate: { 
-    opacity: 1, 
-    y: 0, 
+  initial: { opacity: 0, y: 15, scale: 0.92, filter: 'blur(4px)' },
+  animate: {
+    opacity: 1,
+    y: 0,
     scale: 1,
     filter: 'blur(0px)',
-    transition: {
-      type: 'spring',
-      damping: 25,    // Smoothness
-      stiffness: 400, // Speed
-      mass: 0.8,
-      velocity: 2
-    }
+    transition: { type: 'spring', damping: 25, stiffness: 400, mass: 0.8 }
   }
 };
 
-const MessageBubble: React.FC<Props> = ({ message, isMe, showAvatar, onOpenMenu, onMediaClick, onSelectTrack }) => {
+const MessageBubble: React.FC<Props> = ({
+  message,
+  isMe,
+  showAvatar,
+  onOpenMenu,
+  onMediaClick,
+  onSelectTrack
+}) => {
   const longPressTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const isUnsent = message.isUnsent;
   const isSending = message.status === 'sending';
-  const progress = message.uploadProgress || 0;
   const isText = message.type === 'text' || isUnsent;
 
-  // Touch handlers for context menu
   const handleTouchStart = (e: React.TouchEvent) => {
     if (!onOpenMenu || isSending) return;
     longPressTimer.current = setTimeout(() => {
-      if (typeof navigator !== 'undefined' && navigator.vibrate) navigator.vibrate(40);
+      navigator.vibrate?.(40);
       onOpenMenu(e, message);
     }, 450);
   };
@@ -57,13 +49,11 @@ const MessageBubble: React.FC<Props> = ({ message, isMe, showAvatar, onOpenMenu,
     if (longPressTimer.current) clearTimeout(longPressTimer.current);
   };
 
-  const getMediaItems = (): {url: string, type: 'image' | 'video'}[] => {
-    const rawItems = message.attachments && message.attachments.length > 0 ? message.attachments : [message.content];
-    return rawItems.map(url => ({
+  const getMediaItems = () =>
+    (message.attachments?.length ? message.attachments : [message.content]).map(url => ({
       url,
       type: url.match(/\.(mp4|webm|mov|ogg)$/i) ? 'video' : 'image'
     }));
-  };
 
   const renderContent = () => {
     if (isUnsent) return <p className="text-[13px] text-white/30 italic">Message removed</p>;
@@ -71,48 +61,45 @@ const MessageBubble: React.FC<Props> = ({ message, isMe, showAvatar, onOpenMenu,
     switch (message.type) {
       case 'music':
         try {
-          const trackData = JSON.parse(message.content) as Track;
+          const track = JSON.parse(message.content) as Track;
           return (
-            <motion.div 
+            <motion.div
               whileTap={{ scale: 0.97 }}
-              onClick={() => onSelectTrack?.(trackData)}
+              onClick={() => onSelectTrack?.(track)}
               className="flex items-center gap-3 p-2.5 bg-white/[0.04] border border-white/5 rounded-2xl cursor-pointer min-w-[240px]"
             >
-              <div className="w-12 h-12 rounded-xl overflow-hidden shrink-0 relative shadow-lg">
-                <img src={trackData.albumArt} className="w-full h-full object-cover" loading="lazy" />
-                <div className="absolute inset-0 bg-black/20 flex items-center justify-center">
-                  <Play size={16} fill="white" className="text-white" />
+              <div className="w-12 h-12 rounded-xl overflow-hidden relative">
+                <img src={track.albumArt} className="w-full h-full object-cover" />
+                <div className="absolute inset-0 bg-black/30 flex items-center justify-center">
+                  <Play size={16} fill="white" />
                 </div>
               </div>
-              <div className="flex-1 min-w-0">
-                <h4 className="text-[13px] font-bold text-white truncate">{trackData.title}</h4>
-                <p className="text-[10px] text-white/40 truncate uppercase tracking-widest mt-0.5">{trackData.artist}</p>
+              <div className="min-w-0">
+                <h4 className="text-[13px] font-bold truncate">{track.title}</h4>
+                <p className="text-[10px] text-white/40 uppercase truncate">{track.artist}</p>
               </div>
             </motion.div>
           );
-        } catch { return null; }
+        } catch {
+          return null;
+        }
 
       case 'image':
       case 'video':
       case 'image-grid':
-        const mediaItems = getMediaItems();
+        const media = getMediaItems();
         return (
-          <div className={`grid ${mediaItems.length > 1 ? 'grid-cols-2' : 'grid-cols-1'} gap-1 max-w-[280px]`}>
-            {mediaItems.map((item, i) => (
-              <div 
-                key={i} 
-                onClick={() => onMediaClick?.(item.url, mediaItems)}
-                className="relative aspect-square rounded-[22px] overflow-hidden bg-white/[0.03] shadow-2xl will-change-transform"
+          <div className={`grid ${media.length > 1 ? 'grid-cols-2' : 'grid-cols-1'} gap-1 max-w-[280px]`}>
+            {media.map((m, i) => (
+              <div
+                key={i}
+                onClick={() => onMediaClick?.(m.url, media)}
+                className="relative aspect-square rounded-[22px] overflow-hidden bg-white/[0.03]"
               >
-                {item.type === 'video' ? (
-                  <video src={item.url} className="w-full h-full object-cover" muted playsInline />
+                {m.type === 'video' ? (
+                  <video src={m.url} muted playsInline className="w-full h-full object-cover" />
                 ) : (
-                  <img src={item.url} className="w-full h-full object-cover" loading="lazy" />
-                )}
-                {isSending && (
-                  <div className="absolute inset-0 bg-black/60 backdrop-blur-md flex items-center justify-center">
-                     <div className="w-6 h-6 border-2 border-blue-500 border-t-transparent rounded-full animate-spin" />
-                  </div>
+                  <img src={m.url} className="w-full h-full object-cover" />
                 )}
               </div>
             ))}
@@ -120,78 +107,95 @@ const MessageBubble: React.FC<Props> = ({ message, isMe, showAvatar, onOpenMenu,
         );
 
       default:
-        return <p className="text-[15px] leading-relaxed font-medium text-white/95">{message.content}</p>;
+        return <p className="text-[15px] leading-relaxed text-white/95">{message.content}</p>;
     }
   };
 
   return (
-    <motion.div 
+    <motion.div
       variants={messageVariants}
       initial="initial"
       animate="animate"
-      layout // Enables smooth position shifting when messages above are added/deleted
-      style={{ willChange: 'transform, opacity' }}
-      className={`flex flex-col ${isMe ? 'items-end' : 'items-start'} mb-1 w-full px-3`}
+      layout
+      className={`flex flex-col w-full px-3 mb-1 ${isMe ? 'items-end' : 'items-start'}`}
       onTouchStart={handleTouchStart}
       onTouchEnd={handleTouchEnd}
       onContextMenu={(e) => { e.preventDefault(); onOpenMenu?.(e, message); }}
     >
-      <div className={`flex gap-2 max-w-[88%] ${isMe ? 'flex-row-reverse' : 'flex-row'}`}>
+      <div className={`flex gap-2 max-w-[88%] ${isMe ? 'flex-row-reverse' : 'flex-row'} group`}>
+        
+        {/* Avatar */}
         {!isMe && showAvatar ? (
-          <div className="w-8 h-8 rounded-full border border-white/10 shrink-0 self-end mb-1 overflow-hidden shadow-md">
-            <img src={message.senderAvatar} className="w-full h-full object-cover" alt="" />
+          <div className="w-8 h-8 rounded-full overflow-hidden border border-white/10 self-end">
+            <img src={message.senderAvatar} className="w-full h-full object-cover" />
           </div>
         ) : !isMe && <div className="w-8" />}
 
-        <div className={`flex flex-col ${isMe ? 'items-end' : 'items-start'}`}>
-          {/* Main Bubble Container */}
-          <div className={`
-            relative transition-all duration-500 ease-out
-            ${isText 
-              ? `px-4 py-2.5 backdrop-blur-2xl border shadow-xl
-                 ${isMe 
-                   ? 'bg-blue-600/15 border-blue-500/20 rounded-[22px] rounded-tr-[4px]' 
-                   : 'bg-white/[0.08] border-white/10 rounded-[22px] rounded-tl-[4px]'}`
-              : 'p-0 bg-transparent border-none'
-            }
-          `}>
+        <div className="flex flex-col">
+          
+          {/* ✅ USER NAME (ONLY OTHER USER) */}
+          {!isMe && showAvatar && (
+            <span className="text-[11px] text-white/40 font-semibold mb-0.5 ml-1">
+              {message.senderName?.split(' ')[0]}
+            </span>
+          )}
+
+          {/* Bubble */}
+          <div
+            className={`
+              relative transition-all
+              ${isText
+                ? `px-4 py-2.5 backdrop-blur-2xl border shadow-xl
+                   ${isMe
+                     ? 'bg-blue-600/15 border-blue-500/20 rounded-[22px] rounded-tr-[4px]'
+                     : 'bg-white/[0.08] border-white/10 rounded-[22px] rounded-tl-[4px]'}`
+                : 'p-0'
+              }
+            `}
+          >
             {renderContent()}
-            
-            {/* Metadata (Time & Status) */}
-            <div className={`flex items-center gap-1.5 mt-1 opacity-30 ${isMe ? 'justify-end' : 'justify-start'} ${!isText ? 'px-1' : ''}`}>
-              <span className="text-[9px] font-bold tabular-nums">
-                {new Date(message.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-              </span>
-              {isMe && !isSending && (
-                <CheckCheck size={10} className={isText ? "text-blue-400" : "text-white/60"} />
-              )}
+
+            {/* ✅ TIME — HIDDEN, SHOW ON HOVER */}
+            <div
+              className={`
+                absolute -bottom-4 ${isMe ? 'right-2' : 'left-2'}
+                text-[9px] font-bold opacity-0 group-hover:opacity-40
+                transition-opacity duration-300 pointer-events-none
+              `}
+            >
+              {new Date(message.timestamp).toLocaleTimeString([], {
+                hour: '2-digit',
+                minute: '2-digit'
+              })}
             </div>
+
+            {isMe && !isSending && (
+              <CheckCheck
+                size={10}
+                className="absolute -bottom-4 right-0 opacity-0 group-hover:opacity-60 transition-opacity"
+              />
+            )}
           </div>
 
           {/* Reactions */}
           <AnimatePresence>
-            {message.reactions && message.reactions.length > 0 && (
-              <motion.div 
-                initial={{ scale: 0 }} animate={{ scale: 1 }}
-                className={`flex gap-1 bg-[#121212] border border-white/10 px-2 py-0.5 rounded-full -mt-2 z-10 shadow-xl ${isMe ? 'mr-2' : 'ml-2'}`}
+            {message.reactions?.length > 0 && (
+              <motion.div
+                initial={{ scale: 0 }}
+                animate={{ scale: 1 }}
+                className="flex gap-1 bg-[#121212] border border-white/10 px-2 py-0.5 rounded-full -mt-2 ml-2"
               >
-                {message.reactions.map((emoji, i) => <span key={i} className="text-[10px]">{emoji}</span>)}
+                {message.reactions.map((r, i) => (
+                  <span key={i} className="text-[10px]">{r}</span>
+                ))}
               </motion.div>
             )}
           </AnimatePresence>
+
         </div>
       </div>
     </motion.div>
   );
 };
 
-// 2. RAM OPTIMIZATION: Memo prevents unecessary re-renders of old messages
-export default memo(MessageBubble, (prev, next) => {
-  return (
-    prev.message.id === next.message.id &&
-    prev.message.status === next.message.status &&
-    prev.message.content === next.message.content &&
-    prev.message.reactions?.length === next.message.reactions?.length &&
-    prev.showAvatar === next.showAvatar
-  );
-});
+export default memo(MessageBubble);
