@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
+import type { Variants } from 'framer-motion';
 import { onAuthStateChanged, signOut } from 'firebase/auth';
 import { doc, getDoc, collection, query, orderBy, onSnapshot } from 'firebase/firestore';
 import { auth, db } from './firebase';
@@ -18,8 +19,8 @@ import MiniPlayer from './components/MiniPlayer';
 import FullPlayer from './components/FullPlayer';
 import BottomNav from './components/BottomNav';
 
-/* -------------------- GPU SAFE SCREEN ANIMATION -------------------- */
-const screenVariants = {
+/* ---------------- GPU SAFE SCREEN TRANSITIONS ---------------- */
+const screenVariants: Variants = {
   initial: { opacity: 0, y: 12, scale: 0.98 },
   animate: {
     opacity: 1,
@@ -52,12 +53,11 @@ const App: React.FC = () => {
 
   const audioRef = useRef<HTMLAudioElement>(new Audio());
 
-  /* -------------------- AUTH -------------------- */
+  /* ---------------- AUTH ---------------- */
   useEffect(() => {
     return onAuthStateChanged(auth, async user => {
       if (!user) {
         setCurrentUser(null);
-        setCurrentScreen('home');
         return;
       }
 
@@ -69,7 +69,7 @@ const App: React.FC = () => {
         id: user.uid,
         name: data.username,
         avatar: data.photoURL || 'https://picsum.photos/200',
-        bio: data.bio || 'Music lover'
+        bio: data.bio || 'Music enthusiast'
       });
 
       setCurrentScreen(targetScreen ?? 'home');
@@ -77,7 +77,7 @@ const App: React.FC = () => {
     });
   }, [targetScreen]);
 
-  /* -------------------- TRACKS -------------------- */
+  /* ---------------- TRACKS ---------------- */
   useEffect(() => {
     const q = query(collection(db, 'tracks'), orderBy('createdAt', 'desc'));
     return onSnapshot(q, snap => {
@@ -91,7 +91,7 @@ const App: React.FC = () => {
     });
   }, []);
 
-  /* -------------------- AUDIO ENGINE -------------------- */
+  /* ---------------- AUDIO ENGINE ---------------- */
   useEffect(() => {
     const audio = audioRef.current;
 
@@ -100,7 +100,7 @@ const App: React.FC = () => {
     const onEnd = () => {
       if (repeatMode === 'one') {
         audio.currentTime = 0;
-        audio.play();
+        audio.play().catch(() => {});
       } else {
         nextTrack();
       }
@@ -133,7 +133,7 @@ const App: React.FC = () => {
     isPlaying ? audio.play().catch(() => {}) : audio.pause();
   }, [isPlaying]);
 
-  /* -------------------- CONTROLS -------------------- */
+  /* ---------------- CONTROLS ---------------- */
   const nextTrack = useCallback(() => {
     if (!userTracks.length) return;
     const index = currentTrack
@@ -171,7 +171,7 @@ const App: React.FC = () => {
     Boolean(currentTrack) && !isPlayerExpanded && !['auth', 'splash'].includes(currentScreen);
   const showBottomNav = ['home', 'library'].includes(currentScreen);
 
-  /* -------------------- RENDER -------------------- */
+  /* ---------------- UI ---------------- */
   return (
     <div className="relative w-full min-h-[100dvh] bg-[#020202] text-white overflow-hidden">
       {/* STATIC BACKGROUND (NO ANIMATION = NO LAG) */}
