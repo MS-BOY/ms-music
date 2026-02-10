@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useRef } from 'react';
 import { motion, useMotionValue, useTransform, useAnimation, PanInfo } from 'framer-motion';
 import { Reply } from 'lucide-react';
 
@@ -11,65 +11,53 @@ interface Props {
 const SwipeableMessage: React.FC<Props> = ({ children, onReply, isMe }) => {
   const controls = useAnimation();
   const x = useMotionValue(0);
+  const isDragging = useRef(false);
 
-  // CONSTRAINTS & ANIMATIONS
-  // If it's my message (right side), we drag left (negative x).
-  // If it's their message (left side), we drag right (positive x).
-  
-  // 1. Drag Limits
-  const dragConstraints = isMe ? { left: -100, right: 0 } : { left: 0, right: 100 };
+  // Drag limits: Mobile users usually prefer shorter swipe distances
+  const dragThreshold = 60;
+  const dragConstraints = isMe ? { left: -80, right: 0 } : { left: 0, right: 80 };
 
-  // 2. Icon Transformations based on drag distance (x)
-  // We map the drag distance to opacity, scale, and rotation of the reply icon.
-  const inputRange = isMe ? [-50, -20] : [20, 50];
-  const opacity = useTransform(x, inputRange, [1, 0]);
-  const scale = useTransform(x, inputRange, [1.1, 0.6]);
-  const rotate = useTransform(x, inputRange, isMe ? [-180, 0] : [0, 180]);
+  // Icon visual transformations (Opactiy, Scale, and Rotation)
+  const inputMap = isMe ? [-60, -20] : [20, 60];
+  const opacity = useTransform(x, inputMap, [1, 0]);
+  const scale = useTransform(x, inputMap, [1.2, 0.5]);
+  const rotate = useTransform(x, inputMap, isMe ? [-180, 0] : [0, 180]);
 
   const handleDragEnd = async (_: any, info: PanInfo) => {
+    isDragging.current = false;
     const offset = info.offset.x;
-    const threshold = 60; // Distance required to trigger reply
 
-    // Check if dragged far enough
-    const shouldReply = isMe ? offset < -threshold : offset > threshold;
-
-    if (shouldReply) {
+    if ((!isMe && offset > dragThreshold) || (isMe && offset < -dragThreshold)) {
       onReply();
-      // Haptic feedback for mobile feel
       if (typeof navigator !== 'undefined' && navigator.vibrate) {
-        navigator.vibrate(50);
+        navigator.vibrate(40); // Subtle haptic feedback
       }
     }
-
-    // Always snap back to original position
     await controls.start({ x: 0 });
   };
 
   return (
-    <div className={`relative w-full flex items-center ${isMe ? 'justify-end' : 'justify-start'} group`}>
-      {/* --- THE REPLY ICON LAYER (Behind the message) --- */}
-      <div 
-        className={`absolute top-0 bottom-0 flex items-center justify-center pointer-events-none ${
-          isMe ? 'right-4' : 'left-4'
-        }`}
-      >
+    <div className={`relative w-full flex items-center ${isMe ? 'justify-end' : 'justify-start'} py-1 group`}>
+      {/* --- ICON LAYER --- */}
+      <div className={`absolute flex items-center justify-center pointer-events-none ${isMe ? 'right-6' : 'left-6'}`}>
         <motion.div 
           style={{ opacity, scale, rotate }}
-          className="w-8 h-8 rounded-full bg-white/10 backdrop-blur-md flex items-center justify-center text-white shadow-sm"
+          className="w-9 h-9 rounded-full bg-blue-500/20 backdrop-blur-md flex items-center justify-center text-blue-400 border border-blue-500/20"
         >
-          <Reply size={16} />
+          <Reply size={18} strokeWidth={2.5} />
         </motion.div>
       </div>
 
-      {/* --- THE DRAGGABLE MESSAGE BUBBLE --- */}
+      {/* --- MESSAGE BUBBLE --- */}
       <motion.div
         drag="x"
         dragConstraints={dragConstraints}
-        dragElastic={0.05} // High resistance for that "premium" weighted feel
+        dragElastic={0.1}
+        onDragStart={() => { isDragging.current = true; }}
         onDragEnd={handleDragEnd}
         animate={controls}
-        style={{ x, touchAction: 'pan-y' }} // Important: allows vertical scrolling while touching this
-        className="z-10 relative max-w-[85%]"
+        style={{ x, touchAction: 'pan-y' }} // Critical for smooth vertical scrolling
+        className="z-10 relative max-w-[88%] will-change-transform"
       >
         {children}
       </motion.div>
@@ -77,4 +65,4 @@ const SwipeableMessage: React.FC<Props> = ({ children, onReply, isMe }) => {
   );
 };
 
-export default SwipeableMessage;
+export default React.memo(SwipeableMessage);
