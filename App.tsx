@@ -1,6 +1,5 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
-import { motion, AnimatePresence } from 'framer-motion';
-import type { Variants } from 'framer-motion';
+import { LazyMotion, domAnimation, m, AnimatePresence, type Variants } from 'framer-motion';
 import { onAuthStateChanged, signOut } from 'firebase/auth';
 import { doc, getDoc, collection, query, orderBy, onSnapshot } from 'firebase/firestore';
 import { auth, db } from './firebase';
@@ -19,34 +18,50 @@ import MiniPlayer from './components/MiniPlayer';
 import FullPlayer from './components/FullPlayer';
 import BottomNav from './components/BottomNav';
 
-/* -------------------- SCREEN ANIMATION (GPU SAFE) -------------------- */
+/* -------------------- FPS DETECTOR -------------------- */
+function useLowEndDevice() {
+  const [lowEnd, setLowEnd] = useState(false);
+
+  useEffect(() => {
+    let frames = 0;
+    let start = performance.now();
+
+    const measure = () => {
+      frames++;
+      if (performance.now() - start < 1000) {
+        requestAnimationFrame(measure);
+      } else {
+        setLowEnd(frames < 50);
+      }
+    };
+
+    requestAnimationFrame(measure);
+  }, []);
+
+  return lowEnd;
+}
+
+/* -------------------- GPU SAFE ANIMATION -------------------- */
 const screenVariants: Variants = {
-  initial: {
+  initial: (lowEnd: boolean) => ({
     opacity: 0,
-    y: 16,
-    scale: 0.98
-  },
+    y: lowEnd ? 8 : 16
+  }),
   animate: {
     opacity: 1,
     y: 0,
-    scale: 1,
-    transition: {
-      duration: 0.45,
-      ease: [0.22, 1, 0.36, 1]
-    }
+    transition: { duration: 0.35, ease: 'easeOut' }
   },
   exit: {
     opacity: 0,
-    y: -12,
-    scale: 1.02,
-    transition: {
-      duration: 0.3,
-      ease: [0.22, 1, 0.36, 1]
-    }
+    y: -8,
+    transition: { duration: 0.2 }
   }
 };
 
 const App: React.FC = () => {
+  const lowEnd = useLowEndDevice();
+
   const [currentScreen, setCurrentScreen] = useState<Screen>('splash');
   const [targetScreen, setTargetScreen] = useState<Screen | null>(null);
   const [currentUser, setCurrentUser] = useState<User | null>(null);
@@ -62,7 +77,6 @@ const App: React.FC = () => {
   const [duration, setDuration] = useState(0);
 
   const audioRef = useRef<HTMLAudioElement | null>(null);
-  const playPromiseRef = useRef<Promise<void> | null>(null);
 
   /* -------------------- AUTH -------------------- */
   useEffect(() => {
@@ -105,7 +119,6 @@ const App: React.FC = () => {
   /* -------------------- AUDIO ENGINE -------------------- */
   useEffect(() => {
     if (!audioRef.current) audioRef.current = new Audio();
-
     const audio = audioRef.current;
 
     const updateTime = () => setCurrentTime(audio.currentTime || 0);
@@ -113,10 +126,11 @@ const App: React.FC = () => {
 
     audio.addEventListener('timeupdate', updateTime);
     audio.addEventListener('loadedmetadata', updateDuration);
+
     audio.addEventListener('ended', () => {
       if (repeatMode === 'one') {
         audio.currentTime = 0;
-        audio.play();
+        audio.play().catch(() => {});
       } else {
         nextTrack();
       }
@@ -135,10 +149,7 @@ const App: React.FC = () => {
     audio.pause();
     audio.src = currentTrack.audioUrl;
     audio.load();
-
-    if (isPlaying) {
-      playPromiseRef.current = audio.play().catch(() => {});
-    }
+    if (isPlaying) audio.play().catch(() => {});
   }, [currentTrack]);
 
   useEffect(() => {
@@ -153,9 +164,11 @@ const App: React.FC = () => {
     const index = currentTrack
       ? userTracks.findIndex(t => t.id === currentTrack.id)
       : 0;
+
     const next = shuffleMode
       ? Math.floor(Math.random() * userTracks.length)
       : (index + 1) % userTracks.length;
+
     setCurrentTrack(userTracks[next]);
     setIsPlaying(true);
   }, [currentTrack, userTracks, shuffleMode]);
@@ -177,75 +190,84 @@ const App: React.FC = () => {
   }, [currentUser]);
 
   const showBottomNav = ['home', 'library'].includes(currentScreen);
-  const showMiniPlayer = Boolean(currentTrack && !isPlayerExpanded && !['auth', 'splash'].includes(currentScreen));
+  const showMiniPlayer =
+    Boolean(currentTrack && !isPlayerExpanded && !['auth', 'splash'].includes(currentScreen));
 
   /* -------------------- RENDER -------------------- */
   return (
-    <div className="relative w-full min-h-[100dvh] bg-[#020202] text-white overflow-x-hidden">
-      {/* STATIC BACKGROUND (NO ANIMATION = NO LAG) */}
-      <div className="pointer-events-none fixed inset-0 z-0">
-        <div className="absolute -top-[30%] -left-[20%] w-[120vw] h-[120vw] rounded-full bg-[radial-gradient(circle,rgba(59,130,246,0.12)_0%,transparent_60%)] blur-[120px]" />
-        <div className="absolute top-[20%] -right-[30%] w-[100vw] h-[100vw] rounded-full bg-[radial-gradient(circle,rgba(168,85,247,0.1)_0%,transparent_60%)] blur-[120px]" />
+    <LazyMotion features={domAnimation}>
+      <div className="relative w-full min-h-[100dvh] bg-[#020202] text-white overflow-x-hidden">
+        {/* BACKGROUND (LOW END SAFE) */}
+        {!lowEnd && (
+          <div className="pointer-events-none fixed inset-0 z-0">
+            <div className="absolute -top-[30%] -left-[20%] w-[120vw] h-[120vw] rounded-full bg-[radial-gradient(circle,rgba(59,130,246,0.12)_0%,transparent_60%)] blur-[120px]" />
+            <div className="absolute top-[20%] -right-[30%] w-[100vw] h-[100vw] rounded-full bg-[radial-gradient(circle,rgba(168,85,247,0.1)_0%,transparent_60%)] blur-[120px]" />
+          </div>
+        )}
+
+        <AnimatePresence mode="wait">
+          <m.div
+            key={currentScreen}
+            variants={screenVariants}
+            custom={lowEnd}
+            initial="initial"
+            animate="animate"
+            exit="exit"
+            style={{ willChange: 'transform, opacity' }}
+            className="relative z-10 w-full min-h-[100dvh]"
+          >
+            {{
+              splash: <SplashScreen onFinish={() => setCurrentScreen('home')} />,
+              auth: <AuthScreen onLogin={() => {}} onCancel={() => setCurrentScreen('home')} />,
+              home: <HomeScreen tracks={userTracks} user={currentUser} onSelectTrack={setCurrentTrack} onNavigateProfile={() => navigateTo('profile')} onSeeAll={() => navigateTo('library')} hasPlayer={showMiniPlayer} />,
+              library: <LibraryScreen tracks={userTracks} onSelectTrack={setCurrentTrack} onUploadRequest={() => navigateTo('upload')} hasPlayer={showMiniPlayer} />,
+              upload: <UploadMusicScreen onUploadSuccess={() => setCurrentScreen('library')} onCancel={() => navigateTo('library')} hasPlayer={showMiniPlayer} />,
+              chat: <ChatScreen tracks={userTracks} onSelectTrack={setCurrentTrack} onBack={() => setCurrentScreen('home')} onSettings={() => navigateTo('settings')} hasPlayer={showMiniPlayer} />,
+              profile: <ProfileScreen user={currentUser} onBack={() => setCurrentScreen('home')} onLogout={() => signOut(auth)} hasPlayer={showMiniPlayer} />,
+              settings: <SettingsScreen onBack={() => setCurrentScreen('chat')} onLogout={() => signOut(auth)} hasPlayer={showMiniPlayer} />
+            }[currentScreen]}
+          </m.div>
+        </AnimatePresence>
+
+        {showMiniPlayer && (
+          <MiniPlayer
+            track={currentTrack!}
+            isPlaying={isPlaying}
+            onToggle={() => setIsPlaying(p => !p)}
+            onExpand={() => setIsPlayerExpanded(true)}
+            onNext={nextTrack}
+            onPrev={prevTrack}
+            progress={duration ? (currentTime / duration) * 100 : 0}
+          />
+        )}
+
+        {showBottomNav && !isPlayerExpanded && (
+          <BottomNav currentScreen={currentScreen} onNavigate={navigateTo} />
+        )}
+
+        {isPlayerExpanded && currentTrack && (
+          <FullPlayer
+            track={currentTrack}
+            isPlaying={isPlaying}
+            currentTime={currentTime}
+            duration={duration}
+            shuffleMode={shuffleMode}
+            repeatMode={repeatMode}
+            tracks={userTracks}
+            onToggle={() => setIsPlaying(p => !p)}
+            onNext={nextTrack}
+            onPrev={prevTrack}
+            onSeek={t => audioRef.current && (audioRef.current.currentTime = t)}
+            onToggleShuffle={() => setShuffleMode(p => !p)}
+            onToggleRepeat={() =>
+              setRepeatMode(m => (m === 'none' ? 'one' : m === 'one' ? 'all' : 'none'))
+            }
+            onClose={() => setIsPlayerExpanded(false)}
+            onSelectTrack={setCurrentTrack}
+          />
+        )}
       </div>
-
-      <AnimatePresence mode="wait">
-        <motion.div
-          key={currentScreen}
-          variants={screenVariants}
-          initial="initial"
-          animate="animate"
-          exit="exit"
-          className="relative z-10 w-full min-h-[100dvh]"
-        >
-          {{
-            splash: <SplashScreen onFinish={() => setCurrentScreen('home')} />,
-            auth: <AuthScreen onLogin={() => {}} onCancel={() => setCurrentScreen('home')} />,
-            home: <HomeScreen tracks={userTracks} user={currentUser} onSelectTrack={setCurrentTrack} onNavigateProfile={() => navigateTo('profile')} onSeeAll={() => navigateTo('library')} hasPlayer={showMiniPlayer} />,
-            library: <LibraryScreen tracks={userTracks} onSelectTrack={setCurrentTrack} onUploadRequest={() => navigateTo('upload')} hasPlayer={showMiniPlayer} />,
-            upload: <UploadMusicScreen onUploadSuccess={() => setCurrentScreen('library')} onCancel={() => navigateTo('library')} hasPlayer={showMiniPlayer} />,
-            chat: <ChatScreen tracks={userTracks} onSelectTrack={setCurrentTrack} onBack={() => setCurrentScreen('home')} onSettings={() => navigateTo('settings')} hasPlayer={showMiniPlayer} />,
-            profile: <ProfileScreen user={currentUser} onBack={() => setCurrentScreen('home')} onLogout={() => signOut(auth)} hasPlayer={showMiniPlayer} />,
-            settings: <SettingsScreen onBack={() => setCurrentScreen('chat')} onLogout={() => signOut(auth)} hasPlayer={showMiniPlayer} />
-          }[currentScreen]}
-        </motion.div>
-      </AnimatePresence>
-
-      {showMiniPlayer && (
-        <MiniPlayer
-          track={currentTrack!}
-          isPlaying={isPlaying}
-          onToggle={() => setIsPlaying(p => !p)}
-          onExpand={() => setIsPlayerExpanded(true)}
-          onNext={nextTrack}
-          onPrev={prevTrack}
-          progress={duration ? (currentTime / duration) * 100 : 0}
-        />
-      )}
-
-      {showBottomNav && !isPlayerExpanded && (
-        <BottomNav currentScreen={currentScreen} onNavigate={navigateTo} />
-      )}
-
-      {isPlayerExpanded && currentTrack && (
-        <FullPlayer
-          track={currentTrack}
-          isPlaying={isPlaying}
-          currentTime={currentTime}
-          duration={duration}
-          shuffleMode={shuffleMode}
-          repeatMode={repeatMode}
-          tracks={userTracks}
-          onToggle={() => setIsPlaying(p => !p)}
-          onNext={nextTrack}
-          onPrev={prevTrack}
-          onSeek={t => audioRef.current && (audioRef.current.currentTime = t)}
-          onToggleShuffle={() => setShuffleMode(p => !p)}
-          onToggleRepeat={() => setRepeatMode(m => (m === 'none' ? 'one' : m === 'one' ? 'all' : 'none'))}
-          onClose={() => setIsPlayerExpanded(false)}
-          onSelectTrack={setCurrentTrack}
-        />
-      )}
-    </div>
+    </LazyMotion>
   );
 };
 
