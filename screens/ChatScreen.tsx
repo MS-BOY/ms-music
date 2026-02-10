@@ -1,15 +1,26 @@
 // ChatScreen.tsx
-import React, { useState, useEffect, useRef, memo } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { MoreVertical, ChevronLeft } from 'lucide-react';
-import { doc, onSnapshot, collection, query, orderBy, addDoc, updateDoc, deleteDoc, getDoc, setDoc } from 'firebase/firestore';
+import {
+  doc,
+  onSnapshot,
+  collection,
+  query,
+  orderBy,
+  addDoc,
+  updateDoc,
+  deleteDoc,
+  getDoc,
+  setDoc
+} from 'firebase/firestore';
 import { db, auth } from '../firebase';
 import { MS_GROUP } from '../constants';
 import { Message, Group, Track } from '../types';
-import ChatInput from './ChatInput';
-import MediaViewer from './MediaViewer';
-import TypingIndicator from './TypingIndicator';
-import MessageBubble from './MessageBubble';
+import MessageBubble from '../components/MessageBubble';
+import ChatInput from '../components/ChatInput';
+import MediaViewer from '../components/MediaViewer';
+import TypingIndicator from '../components/TypingIndicator';
 
 interface Props {
   onBack: () => void;
@@ -21,11 +32,11 @@ interface Props {
 
 const GROUP_ID = 'group-1';
 const REACTIONS = ['❤️', '😂', '😮', '😢', '😠', '👍'];
-const CLOUDINARY_UPLOAD_URL = "https://api.cloudinary.com/v1_1/dw3oixfbg/auto/upload";
-const CLOUDINARY_PRESET = "profile";
+const CLOUDINARY_UPLOAD_URL = 'https://api.cloudinary.com/v1_1/dw3oixfbg/auto/upload';
+const CLOUDINARY_PRESET = 'profile';
 
 const ChatScreen: React.FC<Props> = ({ onBack, onSettings, hasPlayer, tracks, onSelectTrack }) => {
-  // State
+  // ---------------- State ----------------
   const [messages, setMessages] = useState<Message[]>([]);
   const [optimisticMessages, setOptimisticMessages] = useState<Message[]>([]);
   const [groupData, setGroupData] = useState<Group>(MS_GROUP);
@@ -36,14 +47,21 @@ const ChatScreen: React.FC<Props> = ({ onBack, onSettings, hasPlayer, tracks, on
   const [menuPosition, setMenuPosition] = useState({ x: 0, y: 0 });
   const [replyingTo, setReplyingTo] = useState<Message | null>(null);
   const [editingMessage, setEditingMessage] = useState<Message | null>(null);
-
   const [viewerOpen, setViewerOpen] = useState(false);
-  const [viewerItems, setViewerItems] = useState<{url: string, type: 'image' | 'video'}[]>([]);
+  const [viewerItems, setViewerItems] = useState<{ url: string; type: 'image' | 'video' }[]>([]);
   const [viewerIndex, setViewerIndex] = useState(0);
 
   const scrollRef = useRef<HTMLDivElement>(null);
 
-  // Fetch group data
+  // ---------------- Responsive Height ----------------
+  const [viewportHeight, setViewportHeight] = useState(window.innerHeight);
+  useEffect(() => {
+    const handleResize = () => setViewportHeight(window.innerHeight);
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, []);
+
+  // ---------------- Firestore Group ----------------
   useEffect(() => {
     const groupRef = doc(db, 'groups', GROUP_ID);
     getDoc(groupRef).then(snap => { if (!snap.exists()) setDoc(groupRef, MS_GROUP) });
@@ -51,7 +69,7 @@ const ChatScreen: React.FC<Props> = ({ onBack, onSettings, hasPlayer, tracks, on
     return () => unsub();
   }, []);
 
-  // Listen typing users
+  // ---------------- Typing Users ----------------
   useEffect(() => {
     const typingRef = collection(db, 'groups', GROUP_ID, 'typing');
     const unsub = onSnapshot(typingRef, snapshot => {
@@ -61,22 +79,20 @@ const ChatScreen: React.FC<Props> = ({ onBack, onSettings, hasPlayer, tracks, on
         .filter(u => u.id !== auth.currentUser?.uid && now - u.timestamp < 5000);
       setTypingUsers(users);
     });
-
     const interval = setInterval(() => {
       const now = Date.now();
       setTypingUsers(prev => prev.filter(u => now - u.timestamp < 5000));
     }, 2000);
-
-    return () => { unsub(); clearInterval(interval); }
+    return () => { unsub(); clearInterval(interval); };
   }, []);
 
-  // Member count
+  // ---------------- Member Count ----------------
   useEffect(() => {
     const unsub = onSnapshot(collection(db, 'users'), snapshot => setMemberCount(snapshot.size));
     return () => unsub();
   }, []);
 
-  // Messages
+  // ---------------- Messages ----------------
   useEffect(() => {
     const q = query(collection(db, 'groups', GROUP_ID, 'messages'), orderBy('timestamp', 'asc'));
     const unsub = onSnapshot(q, snapshot => {
@@ -87,39 +103,35 @@ const ChatScreen: React.FC<Props> = ({ onBack, onSettings, hasPlayer, tracks, on
     return () => unsub();
   }, []);
 
-  // Auto scroll
+  // ---------------- Auto Scroll ----------------
   useEffect(() => {
-    if (!scrollRef.current) return;
-    scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
+    if (scrollRef.current) scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
   }, [messages.length, optimisticMessages.length]);
 
-  // Cloudinary upload
-  const uploadToCloudinary = async (file: File, onProgress: (p: number) => void): Promise<string> => {
+  // ---------------- Cloudinary Upload ----------------
+  const uploadToCloudinary = async (file: File, onProgress: (p: number) => void) => {
     const formData = new FormData();
     formData.append('file', file);
     formData.append('upload_preset', CLOUDINARY_PRESET);
-
-    return new Promise((resolve, reject) => {
+    return new Promise<string>((resolve, reject) => {
       const xhr = new XMLHttpRequest();
       xhr.open('POST', CLOUDINARY_UPLOAD_URL, true);
-      xhr.upload.onprogress = e => { if (e.lengthComputable) onProgress(Math.round((e.loaded / e.total) * 100)) };
-      xhr.onload = () => { xhr.status === 200 ? resolve(JSON.parse(xhr.responseText).secure_url) : reject(new Error('Upload failed')) };
+      xhr.upload.onprogress = e => { if (e.lengthComputable) onProgress(Math.round((e.loaded / e.total) * 100)); };
+      xhr.onload = () => xhr.status === 200 ? resolve(JSON.parse(xhr.responseText).secure_url) : reject(new Error('Upload failed'));
       xhr.onerror = () => reject(new Error('Network error'));
       xhr.send(formData);
     });
   };
 
-  // Send message
+  // ---------------- Send Text Message ----------------
   const handleSendMessage = async (text: string) => {
     if (!text.trim() || !auth.currentUser) return;
-
     if (editingMessage) {
       const msgRef = doc(db, 'groups', GROUP_ID, 'messages', editingMessage.id);
       await updateDoc(msgRef, { content: text, isEdited: true });
       setEditingMessage(null);
       return;
     }
-
     const newMessage: Omit<Message, 'id'> = {
       senderId: auth.currentUser.uid,
       senderName: auth.currentUser.displayName || 'Anonymous',
@@ -137,82 +149,28 @@ const ChatScreen: React.FC<Props> = ({ onBack, onSettings, hasPlayer, tracks, on
         }
       } : {})
     };
-
     setReplyingTo(null);
     await addDoc(collection(db, 'groups', GROUP_ID, 'messages'), newMessage);
   };
 
-  // Send media
-  const handleSendMedia = async (files: File[], type: 'image' | 'video' | 'audio') => {
-    if (!auth.currentUser || files.length === 0) return;
-    const timestamp = Date.now();
-    const tempId = `optimistic-${timestamp}`;
-    const localPreviews = files.map(f => URL.createObjectURL(f));
+  // ---------------- Combine Messages ----------------
+  const combinedMessages = [...messages, ...optimisticMessages].sort((a, b) => a.timestamp - b.timestamp);
 
-    const optimisticMsg: Message = {
-      id: tempId,
-      senderId: auth.currentUser.uid,
-      senderName: auth.currentUser.displayName || 'Anonymous',
-      senderAvatar: auth.currentUser.photoURL || 'https://picsum.photos/200',
-      content: localPreviews[0],
-      attachments: localPreviews,
-      timestamp,
-      type: files.length > 1 ? 'image-grid' : (type === 'audio' ? 'audio' : (type === 'video' ? 'video' : 'image')),
-      reactions: [],
-      status: 'sending',
-      uploadProgress: 0
-    };
-
-    setOptimisticMessages(prev => [...prev, optimisticMsg]);
-    setReplyingTo(null);
-
-    try {
-      const uploadedUrls = await Promise.all(files.map(file => uploadToCloudinary(file, p => {
-        setOptimisticMessages(prev => prev.map(m => m.id === tempId ? { ...m, uploadProgress: p } : m));
-      })));
-
-      const finalMessage: Omit<Message, 'id'> = { ...optimisticMsg, content: uploadedUrls[0], attachments: uploadedUrls, status: 'sent', uploadProgress: 100 };
-      const { id, status, uploadProgress, ...dbMessage } = finalMessage as any;
-      await addDoc(collection(db, 'groups', GROUP_ID, 'messages'), dbMessage);
-    } catch (err) {
-      console.error(err);
-      setOptimisticMessages(prev => prev.filter(m => m.id !== tempId));
-      alert("Failed to send media.");
-    }
-  };
-
-  // Send track
-  const handleSendTrack = async (track: Track) => {
-    if (!auth.currentUser) return;
-    const newMessage: Omit<Message, 'id'> = {
-      senderId: auth.currentUser.uid,
-      senderName: auth.currentUser.displayName || 'Anonymous',
-      senderAvatar: auth.currentUser.photoURL || 'https://picsum.photos/200',
-      content: JSON.stringify(track),
-      timestamp: Date.now(),
-      type: 'music',
-      reactions: [],
-    };
-    await addDoc(collection(db, 'groups', GROUP_ID, 'messages'), newMessage);
-  };
-
-  // Open message menu
+  // ---------------- Open Context Menu ----------------
   const handleOpenMenu = (e: React.MouseEvent | React.TouchEvent, msg: Message) => {
     if (msg.id.startsWith('optimistic-')) return;
     e.preventDefault();
     const clientX = 'touches' in e ? e.touches[0].clientX : (e as React.MouseEvent).clientX;
     const clientY = 'touches' in e ? e.touches[0].clientY : (e as React.MouseEvent).clientY;
-
     const menuWidth = 224;
     const x = Math.min(clientX, window.innerWidth - menuWidth - 20);
     const y = Math.min(clientY, window.innerHeight - 300);
-
     setMenuPosition({ x, y });
     setSelectedMessage(msg);
     setMenuOpen(true);
   };
 
-  // Handle reaction
+  // ---------------- Handle Reaction ----------------
   const handleReaction = async (emoji: string) => {
     if (!selectedMessage) return;
     const msgRef = doc(db, 'groups', GROUP_ID, 'messages', selectedMessage.id);
@@ -222,13 +180,11 @@ const ChatScreen: React.FC<Props> = ({ onBack, onSettings, hasPlayer, tracks, on
     setMenuOpen(false);
   };
 
-  // Combine messages
-  const combinedMessages = [...messages, ...optimisticMessages].sort((a, b) => a.timestamp - b.timestamp);
-
+  // ---------------- Render ----------------
   return (
-    <div className="flex flex-col h-screen w-full bg-[#050505] overflow-hidden">
+    <div className="flex flex-col w-full" style={{ height: viewportHeight, backgroundColor: '#050505' }}>
       {/* Header */}
-      <header className={`fixed left-0 right-0 h-[72px] z-[90] glass bg-black/60 border-b border-white/5 flex items-center justify-between px-4 sm:px-6 backdrop-blur-[20px]`}>
+      <header className="fixed top-0 left-0 right-0 h-[72px] z-[90] glass bg-black/60 border-b border-white/5 flex items-center justify-between px-4 sm:px-6 backdrop-blur-[20px]">
         <div className="flex items-center gap-3">
           <button onClick={onBack} className="p-2 rounded-full hover:bg-white/10 text-white/70 transition-colors">
             <ChevronLeft size={24} />
@@ -252,22 +208,23 @@ const ChatScreen: React.FC<Props> = ({ onBack, onSettings, hasPlayer, tracks, on
       {/* Messages */}
       <div
         ref={scrollRef}
-        className={`flex-1 overflow-y-auto no-scrollbar scroll-smooth space-y-4 px-3 sm:px-6 pt-[80px] pb-[140px]`}
+        className="flex-1 overflow-y-auto scroll-smooth no-scrollbar px-3 sm:px-6"
+        style={{ paddingTop: 72, paddingBottom: 100, maxHeight: viewportHeight }}
       >
         {combinedMessages.map((msg, idx) => (
           <MessageBubble
             key={msg.id}
             message={msg}
             isMe={msg.senderId === auth.currentUser?.uid}
-            showAvatar={idx === 0 || combinedMessages[idx-1].senderId !== msg.senderId}
-            onOpenMenu={handleOpenMenu}
+            showAvatar={idx === 0 || combinedMessages[idx - 1].senderId !== msg.senderId}
+            onOpenMenu={(e) => handleOpenMenu(e, msg)}
             onMediaClick={(url, all) => { setViewerItems(all); setViewerIndex(all.findIndex(i => i.url === url)); setViewerOpen(true); }}
             onSelectTrack={onSelectTrack}
           />
         ))}
       </div>
 
-      {/* Typing + Input */}
+      {/* Typing Indicator + Input */}
       <div className="fixed bottom-0 left-0 right-0 z-20 flex flex-col items-center w-full px-3 sm:px-6 py-2 bg-gradient-to-t from-black via-black/90 to-transparent">
         <AnimatePresence>
           {typingUsers.length > 0 && (
@@ -276,11 +233,10 @@ const ChatScreen: React.FC<Props> = ({ onBack, onSettings, hasPlayer, tracks, on
             </div>
           )}
         </AnimatePresence>
-
         <ChatInput
           onSend={handleSendMessage}
-          onSendMedia={handleSendMedia}
-          onSendTrack={handleSendTrack}
+          onSendMedia={() => {}}
+          onSendTrack={() => {}}
           libraryTracks={tracks}
           replyingTo={replyingTo}
           onCancelReply={() => setReplyingTo(null)}
@@ -289,7 +245,10 @@ const ChatScreen: React.FC<Props> = ({ onBack, onSettings, hasPlayer, tracks, on
         />
       </div>
 
-      {/* Menu */}
+      {/* Media Viewer */}
+      <MediaViewer isOpen={viewerOpen} items={viewerItems} initialIndex={viewerIndex} onClose={() => setViewerOpen(false)} />
+
+      {/* Context Menu */}
       <AnimatePresence>
         {menuOpen && selectedMessage && (
           <>
@@ -297,36 +256,33 @@ const ChatScreen: React.FC<Props> = ({ onBack, onSettings, hasPlayer, tracks, on
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
               exit={{ opacity: 0 }}
-              className="fixed inset-0 bg-black/40 z-[100]"
+              className="fixed inset-0 bg-black/40 z-[100] backdrop-blur-sm"
               onClick={() => setMenuOpen(false)}
             />
             <motion.div
               initial={{ opacity: 0, scale: 0.9, y: 10 }}
               animate={{ opacity: 1, scale: 1, y: 0 }}
               exit={{ opacity: 0, scale: 0.9, y: 10 }}
-              style={{ top: menuPosition.y, left: menuPosition.x }}
-              className="z-[101] w-56 glass-high rounded-[24px] border border-white/10 shadow-lg p-1.5 bg-[#0a0a0a]/95"
+              style={{ position: 'fixed', top: menuPosition.y, left: menuPosition.x }}
+              className="z-[101] w-56 glass-high rounded-[28px] border border-white/10 shadow-2xl p-1.5 bg-[#0a0a0a]/95"
             >
-              <div className="flex justify-around p-1 border-b border-white/5 mb-1">
+              <div className="flex justify-around p-2 border-b border-white/5 mb-1">
                 {REACTIONS.map(emoji => (
-                  <button key={emoji} onClick={() => handleReaction(emoji)} className="text-xl hover:scale-110 transition-transform p-1">{emoji}</button>
+                  <button key={emoji} onClick={() => handleReaction(emoji)} className="text-xl hover:scale-125 transition-transform p-1">{emoji}</button>
                 ))}
               </div>
-              <button onClick={() => { navigator.clipboard.writeText(selectedMessage.content); setMenuOpen(false); }} className="w-full text-left px-4 py-2 hover:bg-white/5 rounded-xl text-[13px] font-bold">Copy</button>
-              <button onClick={() => { setReplyingTo(selectedMessage); setMenuOpen(false); }} className="w-full text-left px-4 py-2 hover:bg-white/5 rounded-xl text-[13px] font-bold">Reply</button>
+              <button onClick={() => { navigator.clipboard.writeText(selectedMessage.content); setMenuOpen(false); }} className="w-full text-left px-4 py-3 hover:bg-white/5 rounded-2xl text-[13px] font-bold">Copy Message</button>
+              <button onClick={() => { setReplyingTo(selectedMessage); setMenuOpen(false); }} className="w-full text-left px-4 py-3 hover:bg-white/5 rounded-2xl text-[13px] font-bold">Reply</button>
               {auth.currentUser?.uid === selectedMessage.senderId && selectedMessage.type === 'text' && (
-                <button onClick={() => { setEditingMessage(selectedMessage); setMenuOpen(false); }} className="w-full text-left px-4 py-2 hover:bg-white/5 rounded-xl text-[13px] font-bold">Edit</button>
+                <button onClick={() => { setEditingMessage(selectedMessage); setMenuOpen(false); }} className="w-full text-left px-4 py-3 hover:bg-white/5 rounded-2xl text-[13px] font-bold">Edit</button>
               )}
               {auth.currentUser?.uid === selectedMessage.senderId && (
-                <button onClick={async () => { await deleteDoc(doc(db, 'groups', GROUP_ID, 'messages', selectedMessage.id)); setMenuOpen(false); }} className="w-full text-left px-4 py-2 hover:bg-red-500/10 rounded-xl text-[13px] font-bold text-red-500">Unsend</button>
+                <button onClick={async () => { await deleteDoc(doc(db, 'groups', GROUP_ID, 'messages', selectedMessage.id)); setMenuOpen(false); }} className="w-full text-left px-4 py-3 hover:bg-red-500/10 rounded-2xl text-[13px] font-bold text-red-500">Unsend</button>
               )}
             </motion.div>
           </>
         )}
       </AnimatePresence>
-
-      {/* Media Viewer */}
-      <MediaViewer isOpen={viewerOpen} items={viewerItems} initialIndex={viewerIndex} onClose={() => setViewerOpen(false)} />
     </div>
   );
 };
