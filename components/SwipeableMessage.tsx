@@ -1,5 +1,11 @@
-import React from 'react';
-import { motion, useMotionValue, useTransform, useAnimation, PanInfo } from 'framer-motion';
+import React, { memo } from 'react';
+import {
+  motion,
+  useMotionValue,
+  useTransform,
+  useAnimation,
+  PanInfo,
+} from 'framer-motion';
 import { Reply } from 'lucide-react';
 
 interface Props {
@@ -8,68 +14,97 @@ interface Props {
   isMe: boolean;
 }
 
+const SWIPE_LIMIT = 90;
+const TRIGGER_DISTANCE = 60;
+
 const SwipeableMessage: React.FC<Props> = ({ children, onReply, isMe }) => {
   const controls = useAnimation();
   const x = useMotionValue(0);
 
-  // CONSTRAINTS & ANIMATIONS
-  // If it's my message (right side), we drag left (negative x).
-  // If it's their message (left side), we drag right (positive x).
-  
-  // 1. Drag Limits
-  const dragConstraints = isMe ? { left: -100, right: 0 } : { left: 0, right: 100 };
+  // Drag direction control
+  const dragConstraints = isMe
+    ? { left: -SWIPE_LIMIT, right: 0 }
+    : { left: 0, right: SWIPE_LIMIT };
 
-  // 2. Icon Transformations based on drag distance (x)
-  // We map the drag distance to opacity, scale, and rotation of the reply icon.
-  const inputRange = isMe ? [-50, -20] : [20, 50];
-  const opacity = useTransform(x, inputRange, [1, 0]);
-  const scale = useTransform(x, inputRange, [1.1, 0.6]);
-  const rotate = useTransform(x, inputRange, isMe ? [-180, 0] : [0, 180]);
+  // GPU-friendly transforms
+  const opacity = useTransform(
+    x,
+    isMe ? [-TRIGGER_DISTANCE, -20] : [20, TRIGGER_DISTANCE],
+    [1, 0]
+  );
 
-  const handleDragEnd = async (_: any, info: PanInfo) => {
-    const offset = info.offset.x;
-    const threshold = 60; // Distance required to trigger reply
+  const scale = useTransform(
+    x,
+    isMe ? [-TRIGGER_DISTANCE, -20] : [20, TRIGGER_DISTANCE],
+    [1.1, 0.6]
+  );
 
-    // Check if dragged far enough
-    const shouldReply = isMe ? offset < -threshold : offset > threshold;
+  const rotate = useTransform(
+    x,
+    isMe ? [-TRIGGER_DISTANCE, -20] : [20, TRIGGER_DISTANCE],
+    isMe ? [-180, 0] : [0, 180]
+  );
+
+  const handleDragEnd = async (_: unknown, info: PanInfo) => {
+    const offsetX = info.offset.x;
+    const shouldReply = isMe
+      ? offsetX < -TRIGGER_DISTANCE
+      : offsetX > TRIGGER_DISTANCE;
 
     if (shouldReply) {
       onReply();
-      // Haptic feedback for mobile feel
-      if (typeof navigator !== 'undefined' && navigator.vibrate) {
-        navigator.vibrate(50);
+
+      // Light haptic (safe)
+      if (navigator?.vibrate) {
+        navigator.vibrate(40);
       }
     }
 
-    // Always snap back to original position
-    await controls.start({ x: 0 });
+    // Snap back smoothly
+    await controls.start({
+      x: 0,
+      transition: {
+        type: 'spring',
+        stiffness: 420,
+        damping: 32,
+      },
+    });
   };
 
   return (
-    <div className={`relative w-full flex items-center ${isMe ? 'justify-end' : 'justify-start'} group`}>
-      {/* --- THE REPLY ICON LAYER (Behind the message) --- */}
-      <div 
-        className={`absolute top-0 bottom-0 flex items-center justify-center pointer-events-none ${
-          isMe ? 'right-4' : 'left-4'
+    <div
+      className={`relative w-full flex ${
+        isMe ? 'justify-end' : 'justify-start'
+      } px-2`}
+    >
+      {/* Reply Icon */}
+      <div
+        className={`absolute inset-y-0 flex items-center pointer-events-none ${
+          isMe ? 'right-3' : 'left-3'
         }`}
       >
-        <motion.div 
+        <motion.div
           style={{ opacity, scale, rotate }}
-          className="w-8 h-8 rounded-full bg-white/10 backdrop-blur-md flex items-center justify-center text-white shadow-sm"
+          className="w-8 h-8 rounded-full bg-white/10 backdrop-blur-md
+                     flex items-center justify-center text-white"
         >
           <Reply size={16} />
         </motion.div>
       </div>
 
-      {/* --- THE DRAGGABLE MESSAGE BUBBLE --- */}
+      {/* Message Bubble */}
       <motion.div
         drag="x"
         dragConstraints={dragConstraints}
-        dragElastic={0.05} // High resistance for that "premium" weighted feel
+        dragElastic={0.04}
         onDragEnd={handleDragEnd}
         animate={controls}
-        style={{ x, touchAction: 'pan-y' }} // Important: allows vertical scrolling while touching this
-        className="z-10 relative max-w-[85%]"
+        style={{
+          x,
+          touchAction: 'pan-y',
+          willChange: 'transform',
+        }}
+        className="relative z-10 max-w-[85%]"
       >
         {children}
       </motion.div>
@@ -77,4 +112,4 @@ const SwipeableMessage: React.FC<Props> = ({ children, onReply, isMe }) => {
   );
 };
 
-export default SwipeableMessage;
+export default memo(SwipeableMessage);
