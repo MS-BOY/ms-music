@@ -19,11 +19,11 @@ const messageVariants = {
     opacity: 1,
     y: 0,
     scale: 1,
-    transition: { type: 'spring', damping: 25, stiffness: 500, mass: 0.6 }
+    transition: { type: 'spring', damping: 25, stiffness: 500 }
   },
 };
 
-// --- Swipeable reply gesture ---
+// ================= Swipe Wrapper =================
 const SwipeableWrapper: React.FC<{
   children: React.ReactNode;
   isMe: boolean;
@@ -31,17 +31,16 @@ const SwipeableWrapper: React.FC<{
 }> = ({ children, isMe, onReply }) => {
   const controls = useAnimation();
   const x = useMotionValue(0);
-  const isDragging = useRef(false);
-
   const dragThreshold = 50;
+
   const dragConstraints = isMe ? { left: -80, right: 0 } : { left: 0, right: 80 };
   const inputMap = isMe ? [-dragThreshold, -10] : [10, dragThreshold];
+
   const opacity = useTransform(x, inputMap, [1, 0]);
   const scale = useTransform(x, inputMap, [1.2, 0.7]);
   const rotate = useTransform(x, inputMap, isMe ? [-180, 0] : [0, 180]);
 
   const handleDragEnd = async (_: any, info: PanInfo) => {
-    isDragging.current = false;
     const offset = info.offset.x;
 
     if ((!isMe && offset > dragThreshold) || (isMe && offset < -dragThreshold)) {
@@ -57,7 +56,7 @@ const SwipeableWrapper: React.FC<{
 
   return (
     <div className={`relative w-full flex items-end ${isMe ? 'justify-end' : 'justify-start'} py-0`}>
-      <div className={`absolute flex items-center justify-center pointer-events-none ${isMe ? 'right-2' : 'left-2'}`}>
+      <div className={`absolute ${isMe ? 'right-2' : 'left-2'} pointer-events-none`}>
         <motion.div
           style={{ opacity, scale, rotate }}
           className="w-7 h-7 rounded-full bg-blue-500/20 backdrop-blur-md flex items-center justify-center text-blue-400 border border-blue-500/20"
@@ -70,11 +69,10 @@ const SwipeableWrapper: React.FC<{
         drag="x"
         dragConstraints={dragConstraints}
         dragElastic={0.1}
-        onDragStart={() => { isDragging.current = true; }}
         onDragEnd={handleDragEnd}
         animate={controls}
         style={{ x, touchAction: 'pan-y' }}
-        className="z-10 relative max-w-[90%] will-change-transform"
+        className="z-10 relative max-w-[90%]"
       >
         {children}
       </motion.div>
@@ -82,6 +80,7 @@ const SwipeableWrapper: React.FC<{
   );
 };
 
+// ================= Message Bubble =================
 const MessageBubble: React.FC<Props> = ({
   message,
   isMe,
@@ -108,23 +107,43 @@ const MessageBubble: React.FC<Props> = ({
     if (longPressTimer.current) clearTimeout(longPressTimer.current);
   };
 
+  // ================= Content Renderer =================
   const renderContent = () => {
     if (message.isUnsent)
       return <p className="text-[12px] italic text-white/30">Message removed</p>;
 
     return (
       <div className="flex flex-col gap-[2px]">
+
+        {/* ===== Reply Preview (FIXED) ===== */}
         {message.replyTo && (
-          <div className="px-2 py-1 bg-white/10 border-l-2 border-blue-400 rounded-xl mb-0.5">
-            <p className="text-[10px] text-white/50 truncate">
+          <div className="px-2 py-1 bg-white/10 border-l-2 border-blue-400 rounded-xl mb-1 max-w-[200px] overflow-hidden">
+            <p className="text-[10px] text-white/50 truncate mb-1">
               Replying to {message.replyTo.senderName}
             </p>
-            <p className="text-[11px] text-white/70 truncate">
-              {message.replyTo.content}
-            </p>
+
+            {message.replyTo.type === 'image' ? (
+              <img
+                src={message.replyTo.content}
+                className="w-16 h-16 object-cover rounded-md"
+              />
+            ) : message.replyTo.type === 'video' ? (
+              <div className="w-16 h-16 bg-black/40 rounded-md flex items-center justify-center text-[10px] text-white/60">
+                🎥 Video
+              </div>
+            ) : message.replyTo.type === 'music' ? (
+              <div className="text-[11px] text-white/70 truncate">
+                🎵 Music
+              </div>
+            ) : (
+              <p className="text-[11px] text-white/70 truncate">
+                {message.replyTo.content}
+              </p>
+            )}
           </div>
         )}
 
+        {/* ===== Main Content ===== */}
         {isText ? (
           <p className={`text-[14px] leading-snug font-medium ${isMe ? 'text-white' : 'text-white/95'}`}>
             {message.content}
@@ -136,9 +155,9 @@ const MessageBubble: React.FC<Props> = ({
               return (
                 <div
                   onClick={() => onSelectTrack?.(track)}
-                  className="flex items-center gap-2 p-1.5 bg-white/[0.05] border border-white/5 rounded-xl cursor-pointer min-w-[200px] active:scale-95 transition-transform"
+                  className="flex items-center gap-2 p-2 bg-white/10 rounded-xl cursor-pointer active:scale-95 transition-transform"
                 >
-                  <img src={track.albumArt} className="w-10 h-10 rounded-lg object-cover shadow-lg" />
+                  <img src={track.albumArt} className="w-10 h-10 rounded-lg object-cover" />
                   <div className="flex-1 min-w-0">
                     <h4 className="text-[13px] font-bold text-white truncate">{track.title}</h4>
                     <p className="text-[10px] text-white/40 truncate uppercase tracking-widest">
@@ -153,14 +172,20 @@ const MessageBubble: React.FC<Props> = ({
           })()
         ) : message.type === 'image' || message.type === 'video' ? (
           <div
-            onClick={() => onMediaClick?.(message.content, [])}
-            className="relative aspect-square w-[200px] rounded-lg overflow-hidden bg-white/[0.02] shadow-2xl"
+            onClick={() =>
+              onMediaClick?.(
+                message.content,
+                [{ url: message.content, type: message.type }]
+              )
+            }
+            className="relative aspect-square w-[220px] rounded-xl overflow-hidden bg-black/30 shadow-2xl cursor-pointer active:scale-95 transition-transform duration-200"
           >
             {message.type === 'video' ? (
               <video src={message.content} className="w-full h-full object-cover" muted playsInline />
             ) : (
-              <img src={message.content} className="w-full h-full object-cover" />
+              <img src={message.content} className="w-full h-full object-cover" draggable={false} />
             )}
+
             {isSending && (
               <div className="absolute inset-0 bg-black/50 flex items-center justify-center animate-pulse" />
             )}
@@ -176,7 +201,6 @@ const MessageBubble: React.FC<Props> = ({
         variants={messageVariants}
         initial="initial"
         animate="animate"
-        style={{ willChange: 'transform, opacity' }}
         className={`flex flex-col ${isMe ? 'items-end' : 'items-start'} w-full`}
         onTouchStart={handleTouchStart}
         onTouchEnd={handleTouchEnd}
@@ -190,47 +214,28 @@ const MessageBubble: React.FC<Props> = ({
 
         <div className={`flex gap-0 max-w-[90%] ${isMe ? 'flex-row-reverse' : 'flex-row'}`}>
           {!isMe && showAvatar ? (
-            <div className="w-5 h-5 rounded-full border border-white/10 shrink-0 overflow-hidden shadow-md">
+            <div className="w-5 h-5 rounded-full border border-white/10 overflow-hidden">
               <img src={message.senderAvatar} className="w-full h-full object-cover" />
             </div>
           ) : !isMe ? <div className="w-[1px]" /> : null}
 
-          <div className={`flex flex-col ${isMe ? 'items-end' : 'items-start'} relative`}>
+          <div className="relative group">
             <div
               className={`
-                relative group
-                px-3 py-1.5 rounded-2xl
-                transition-all duration-300 ease-out
-                backdrop-blur-xl
+                relative px-3 py-1.5 rounded-2xl backdrop-blur-xl
+                transition-all duration-300
                 ${isText
                   ? isMe
-                    ? `
-                      bg-gradient-to-br from-blue-500/90 to-blue-700/80
-                      rounded-tr-[6px]
-                      shadow-[0_4px_15px_rgba(0,0,0,0.25)]
-                      border border-white/10
-                    `
-                    : `
-                      bg-gradient-to-br from-white/15 to-white/5
-                      rounded-tl-[6px]
-                      shadow-[0_4px_15px_rgba(0,0,0,0.25)]
-                      border border-white/5
-                    `
+                    ? 'bg-gradient-to-br from-blue-500/90 to-blue-700/80 rounded-tr-[6px] shadow-lg'
+                    : 'bg-white/10 rounded-tl-[6px] shadow-lg'
                   : 'p-0 bg-transparent'}
               `}
-              style={{ transformStyle: 'preserve-3d' }}
             >
-              {isText && (
-                <div className="absolute inset-0 rounded-2xl pointer-events-none">
-                  <div className="absolute inset-0 bg-gradient-to-t from-transparent via-white/5 to-white/10 rounded-2xl opacity-60" />
-                </div>
-              )}
-
               {renderContent()}
 
               {isMe && !isSending && (
-                <div className="absolute -bottom-4 right-2 flex items-center gap-1 text-[9px] text-white/50 opacity-0 group-hover:opacity-100 transition-all duration-200">
-                  <span className="tabular-nums">
+                <div className="absolute -bottom-4 right-2 flex items-center gap-1 text-[9px] text-white/50 opacity-0 group-hover:opacity-100 transition">
+                  <span>
                     {new Date(message.timestamp).toLocaleTimeString([], {
                       hour: '2-digit',
                       minute: '2-digit',
@@ -247,10 +252,8 @@ const MessageBubble: React.FC<Props> = ({
   );
 };
 
-export default memo(MessageBubble, (prev, next) => {
-  return (
-    prev.message.id === next.message.id &&
-    prev.message.status === next.message.status &&
-    prev.showAvatar === next.showAvatar
-  );
-});
+export default memo(MessageBubble, (prev, next) =>
+  prev.message.id === next.message.id &&
+  prev.message.status === next.message.status &&
+  prev.showAvatar === next.showAvatar
+);
