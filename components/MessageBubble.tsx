@@ -8,7 +8,10 @@ interface Props {
   isMe: boolean;
   showAvatar: boolean;
   onOpenMenu?: (e: React.MouseEvent | React.TouchEvent, message: Message) => void;
-  onMediaClick?: (url: string, allMedia: { url: string; type: 'image' | 'video' }[]) => void;
+  onMediaClick?: (
+    url: string,
+    allMedia: { url: string; type: 'image' | 'video' }[]
+  ) => void;
   onSelectTrack?: (track: Track) => void;
   onReply?: (message: Message) => void;
 }
@@ -19,11 +22,12 @@ const messageVariants = {
     opacity: 1,
     y: 0,
     scale: 1,
-    transition: { type: 'spring', damping: 25, stiffness: 500 }
+    transition: { type: 'spring', damping: 22, stiffness: 350 },
   },
 };
 
-// ================= Swipe Wrapper =================
+/* ================= Swipe Wrapper ================= */
+
 const SwipeableWrapper: React.FC<{
   children: React.ReactNode;
   isMe: boolean;
@@ -31,14 +35,12 @@ const SwipeableWrapper: React.FC<{
 }> = ({ children, isMe, onReply }) => {
   const controls = useAnimation();
   const x = useMotionValue(0);
-  const dragThreshold = 50;
 
+  const dragThreshold = 55;
   const dragConstraints = isMe ? { left: -80, right: 0 } : { left: 0, right: 80 };
-  const inputMap = isMe ? [-dragThreshold, -10] : [10, dragThreshold];
 
-  const opacity = useTransform(x, inputMap, [1, 0]);
-  const scale = useTransform(x, inputMap, [1.2, 0.7]);
-  const rotate = useTransform(x, inputMap, isMe ? [-180, 0] : [0, 180]);
+  const opacity = useTransform(x, [-dragThreshold, 0, dragThreshold], [1, 0, 1]);
+  const scale = useTransform(x, [-dragThreshold, 0, dragThreshold], [1.2, 0.7, 1.2]);
 
   const handleDragEnd = async (_: any, info: PanInfo) => {
     const offset = info.offset.x;
@@ -50,18 +52,18 @@ const SwipeableWrapper: React.FC<{
 
     await controls.start({
       x: 0,
-      transition: { type: 'spring', stiffness: 350, damping: 30 }
+      transition: { type: 'spring', stiffness: 350, damping: 30 },
     });
   };
 
   return (
-    <div className={`relative w-full flex items-end ${isMe ? 'justify-end' : 'justify-start'} py-0`}>
+    <div className={`relative w-full flex ${isMe ? 'justify-end' : 'justify-start'} py-[1px]`}>
       <div className={`absolute ${isMe ? 'right-2' : 'left-2'} pointer-events-none`}>
         <motion.div
-          style={{ opacity, scale, rotate }}
-          className="w-7 h-7 rounded-full bg-blue-500/20 backdrop-blur-md flex items-center justify-center text-blue-400 border border-blue-500/20"
+          style={{ opacity, scale }}
+          className="w-7 h-7 rounded-full bg-blue-500/20 flex items-center justify-center text-blue-400"
         >
-          <Reply size={14} strokeWidth={2.2} />
+          <Reply size={14} />
         </motion.div>
       </div>
 
@@ -71,8 +73,8 @@ const SwipeableWrapper: React.FC<{
         dragElastic={0.1}
         onDragEnd={handleDragEnd}
         animate={controls}
-        style={{ x, touchAction: 'pan-y' }}
-        className="z-10 relative max-w-[90%]"
+        style={{ x }}
+        className="max-w-[92%]"
       >
         {children}
       </motion.div>
@@ -80,7 +82,8 @@ const SwipeableWrapper: React.FC<{
   );
 };
 
-// ================= Message Bubble =================
+/* ================= Message Bubble ================= */
+
 const MessageBubble: React.FC<Props> = ({
   message,
   isMe,
@@ -93,10 +96,10 @@ const MessageBubble: React.FC<Props> = ({
   const longPressTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const isSending = message.status === 'sending';
   const isText = message.type === 'text' || message.isUnsent;
-  const firstName = message.senderName?.split(' ')[0] || 'User';
 
   const handleTouchStart = (e: React.TouchEvent) => {
     if (!onOpenMenu || isSending) return;
+
     longPressTimer.current = setTimeout(() => {
       if (navigator.vibrate) navigator.vibrate(40);
       onOpenMenu(e, message);
@@ -107,93 +110,146 @@ const MessageBubble: React.FC<Props> = ({
     if (longPressTimer.current) clearTimeout(longPressTimer.current);
   };
 
-  // ================= Content Renderer =================
+  /* ================= Reply Preview ================= */
+
+  const renderReplyPreview = () => {
+    if (!message.replyTo) return null;
+
+    const reply = message.replyTo;
+
+    return (
+      <div className="px-2 py-1 bg-white/10 border-l-2 border-blue-400 rounded-xl mb-1 max-w-[220px] overflow-hidden">
+        <p className="text-[10px] text-white/50 truncate mb-1">
+          Replying to {reply.senderName || 'User'}
+        </p>
+
+        {/* IMAGE */}
+        {reply.type === 'image' && (
+          <img
+            src={reply.content}
+            className="w-20 h-20 rounded-md object-cover"
+            loading="lazy"
+          />
+        )}
+
+        {/* VIDEO */}
+        {reply.type === 'video' && (
+          <div className="w-20 h-20 rounded-md bg-black/40 flex items-center justify-center text-xs text-white/60">
+            🎥 Video
+          </div>
+        )}
+
+        {/* MUSIC */}
+        {reply.type === 'music' && (() => {
+          try {
+            const track = JSON.parse(reply.content) as Track;
+            return (
+              <div className="flex items-center gap-2">
+                <img
+                  src={track.albumArt}
+                  className="w-10 h-10 rounded-md object-cover"
+                />
+                <div className="min-w-0">
+                  <p className="text-[11px] text-white truncate">
+                    {track.title}
+                  </p>
+                  <p className="text-[9px] text-white/50 truncate">
+                    {track.artist}
+                  </p>
+                </div>
+              </div>
+            );
+          } catch {
+            return <p className="text-xs text-white/50">🎵 Music</p>;
+          }
+        })()}
+
+        {/* TEXT */}
+        {(!reply.type || reply.type === 'text') && (
+          <p className="text-[11px] text-white/70 truncate">
+            {reply.content}
+          </p>
+        )}
+      </div>
+    );
+  };
+
+  /* ================= Main Content ================= */
+
   const renderContent = () => {
     if (message.isUnsent)
       return <p className="text-[12px] italic text-white/30">Message removed</p>;
 
-    return (
-      <div className="flex flex-col gap-[2px]">
+    if (isText) {
+      return (
+        <p className="text-[14px] leading-snug font-medium text-white">
+          {message.content}
+        </p>
+      );
+    }
 
-        {/* ===== Reply Preview (FIXED) ===== */}
-        {message.replyTo && (
-          <div className="px-2 py-1 bg-white/10 border-l-2 border-blue-400 rounded-xl mb-1 max-w-[200px] overflow-hidden">
-            <p className="text-[10px] text-white/50 truncate mb-1">
-              Replying to {message.replyTo.senderName}
-            </p>
-
-            {message.replyTo.type === 'image' ? (
-              <img
-                src={message.replyTo.content}
-                className="w-16 h-16 object-cover rounded-md"
-              />
-            ) : message.replyTo.type === 'video' ? (
-              <div className="w-16 h-16 bg-black/40 rounded-md flex items-center justify-center text-[10px] text-white/60">
-                🎥 Video
-              </div>
-            ) : message.replyTo.type === 'music' ? (
-              <div className="text-[11px] text-white/70 truncate">
-                🎵 Music
-              </div>
-            ) : (
-              <p className="text-[11px] text-white/70 truncate">
-                {message.replyTo.content}
-              </p>
-            )}
-          </div>
-        )}
-
-        {/* ===== Main Content ===== */}
-        {isText ? (
-          <p className={`text-[14px] leading-snug font-medium ${isMe ? 'text-white' : 'text-white/95'}`}>
-            {message.content}
-          </p>
-        ) : message.type === 'music' ? (
-          (() => {
-            try {
-              const track = JSON.parse(message.content) as Track;
-              return (
-                <div
-                  onClick={() => onSelectTrack?.(track)}
-                  className="flex items-center gap-2 p-2 bg-white/10 rounded-xl cursor-pointer active:scale-95 transition-transform"
-                >
-                  <img src={track.albumArt} className="w-10 h-10 rounded-lg object-cover" />
-                  <div className="flex-1 min-w-0">
-                    <h4 className="text-[13px] font-bold text-white truncate">{track.title}</h4>
-                    <p className="text-[10px] text-white/40 truncate uppercase tracking-widest">
-                      {track.artist}
-                    </p>
-                  </div>
-                </div>
-              );
-            } catch {
-              return null;
-            }
-          })()
-        ) : message.type === 'image' || message.type === 'video' ? (
+    if (message.type === 'music') {
+      try {
+        const track = JSON.parse(message.content) as Track;
+        return (
           <div
-            onClick={() =>
-              onMediaClick?.(
-                message.content,
-                [{ url: message.content, type: message.type }]
-              )
-            }
-            className="relative aspect-square w-[220px] rounded-xl overflow-hidden bg-black/30 shadow-2xl cursor-pointer active:scale-95 transition-transform duration-200"
+            onClick={() => onSelectTrack?.(track)}
+            className="flex items-center gap-2 p-2 bg-white/5 rounded-xl cursor-pointer active:scale-95 transition"
           >
-            {message.type === 'video' ? (
-              <video src={message.content} className="w-full h-full object-cover" muted playsInline />
-            ) : (
-              <img src={message.content} className="w-full h-full object-cover" draggable={false} />
-            )}
-
-            {isSending && (
-              <div className="absolute inset-0 bg-black/50 flex items-center justify-center animate-pulse" />
-            )}
+            <img
+              src={track.albumArt}
+              className="w-12 h-12 rounded-lg object-cover"
+            />
+            <div className="min-w-0">
+              <p className="text-sm font-semibold truncate">{track.title}</p>
+              <p className="text-xs text-white/50 truncate">
+                {track.artist}
+              </p>
+            </div>
           </div>
-        ) : null}
-      </div>
-    );
+        );
+      } catch {
+        return null;
+      }
+    }
+
+    if (message.type === 'image' || message.type === 'video') {
+      return (
+        <div
+          onClick={() =>
+            onMediaClick?.(message.content, [
+              { url: message.content, type: message.type },
+            ])
+          }
+          className="relative w-[230px] rounded-xl overflow-hidden cursor-pointer active:scale-95 transition"
+        >
+          {message.type === 'video' ? (
+            <video
+              src={message.content}
+              className="w-full object-cover"
+              muted
+              playsInline
+            />
+          ) : (
+            <img
+              src={message.content}
+              className="w-full object-cover"
+              loading="lazy"
+              draggable={false}
+            />
+          )}
+
+          {isSending && (
+            <div className="absolute inset-0 bg-black/50 animate-pulse" />
+          )}
+        </div>
+      );
+    }
+
+    return null;
   };
+
+  /* ================= UI ================= */
 
   return (
     <SwipeableWrapper isMe={isMe} onReply={() => onReply?.(message)}>
@@ -204,47 +260,34 @@ const MessageBubble: React.FC<Props> = ({
         className={`flex flex-col ${isMe ? 'items-end' : 'items-start'} w-full`}
         onTouchStart={handleTouchStart}
         onTouchEnd={handleTouchEnd}
-        onContextMenu={(e) => { e.preventDefault(); onOpenMenu?.(e, message); }}
+        onContextMenu={(e) => {
+          e.preventDefault();
+          onOpenMenu?.(e, message);
+        }}
       >
-        {!isMe && showAvatar && (
-          <span className="text-[10px] font-bold text-white/20 uppercase tracking-[0.1em] mb-[1px] ml-1">
-            {firstName}
-          </span>
-        )}
+        <div className="flex gap-[3px] max-w-[92%]">
+          <div
+            className={`relative px-3 py-2 rounded-2xl transition-all duration-300
+              ${isText
+                ? isMe
+                  ? 'bg-gradient-to-br from-blue-600 to-blue-500 text-white'
+                  : 'bg-white/10 text-white'
+                : 'p-0 bg-transparent'
+              }
+            `}
+          >
+            {renderReplyPreview()}
+            {renderContent()}
 
-        <div className={`flex gap-0 max-w-[90%] ${isMe ? 'flex-row-reverse' : 'flex-row'}`}>
-          {!isMe && showAvatar ? (
-            <div className="w-5 h-5 rounded-full border border-white/10 overflow-hidden">
-              <img src={message.senderAvatar} className="w-full h-full object-cover" />
-            </div>
-          ) : !isMe ? <div className="w-[1px]" /> : null}
-
-          <div className="relative group">
-            <div
-              className={`
-                relative px-3 py-1.5 rounded-2xl backdrop-blur-xl
-                transition-all duration-300
-                ${isText
-                  ? isMe
-                    ? 'bg-gradient-to-br from-blue-500/90 to-blue-700/80 rounded-tr-[6px] shadow-lg'
-                    : 'bg-white/10 rounded-tl-[6px] shadow-lg'
-                  : 'p-0 bg-transparent'}
-              `}
-            >
-              {renderContent()}
-
-              {isMe && !isSending && (
-                <div className="absolute -bottom-4 right-2 flex items-center gap-1 text-[9px] text-white/50 opacity-0 group-hover:opacity-100 transition">
-                  <span>
-                    {new Date(message.timestamp).toLocaleTimeString([], {
-                      hour: '2-digit',
-                      minute: '2-digit',
-                    })}
-                  </span>
-                  <CheckCheck size={10} className="text-blue-400" />
-                </div>
-              )}
-            </div>
+            {/* Hover time */}
+            {isMe && !isSending && (
+              <span className="absolute -bottom-4 right-2 text-[9px] text-white/40 opacity-0 group-hover:opacity-100 transition">
+                {new Date(message.timestamp).toLocaleTimeString([], {
+                  hour: '2-digit',
+                  minute: '2-digit',
+                })}
+              </span>
+            )}
           </div>
         </div>
       </motion.div>
@@ -252,8 +295,10 @@ const MessageBubble: React.FC<Props> = ({
   );
 };
 
-export default memo(MessageBubble, (prev, next) =>
-  prev.message.id === next.message.id &&
-  prev.message.status === next.message.status &&
-  prev.showAvatar === next.showAvatar
-);
+export default memo(MessageBubble, (prev, next) => {
+  return (
+    prev.message.id === next.message.id &&
+    prev.message.status === next.message.status &&
+    prev.showAvatar === next.showAvatar
+  );
+});
