@@ -20,6 +20,18 @@ const MAX_VIDEO_SIZE = 50 * 1024 * 1024;
 const GROUP_ID = 'group-1';
 const EMOJI_LIST = ['❤️','😂','🔥','🙌','😮','😢','💯','✨','🎵','🎹','🎸','🎧','⚡️','🌈','💎','👑','🚀','🛸','👾','🎉'];
 
+// Helper functions
+const isBlockedLink = (url: string) => /firebasestorage\.googleapis\.com|res\.cloudinary\.com/.test(url);
+
+const getMediaType = (content: string | any): 'image' | 'video' | 'music' | 'text' => {
+  if(typeof content === 'object' && content?.title && content?.url) return 'music';
+  if(typeof content !== 'string') return 'text';
+  if(isBlockedLink(content)) return 'text';
+  if(/\.(jpe?g|png|gif|webp)$/i.test(content)) return 'image';
+  if(/\.(mp4|webm|ogg)$/i.test(content)) return 'video';
+  return 'text';
+};
+
 const ChatInput: React.FC<Props> = ({ onSend, onSendMedia, onSendTrack, libraryTracks=[], replyingTo, onCancelReply, editingMessage, onCancelEdit }) => {
   const [text,setText] = useState('');
   const [isExpanded,setIsExpanded] = useState(false);
@@ -83,7 +95,9 @@ const ChatInput: React.FC<Props> = ({ onSend, onSendMedia, onSendTrack, libraryT
     const files = Array.from(e.target.files||[]) as File[];
     if(files.length===0) return;
 
-    const validFiles:File[]=[]; const newPreviews:{url:string,type:'image'|'video'}[]=[];
+    const validFiles:File[]=[]; 
+    const newPreviews:{url:string,type:'image'|'video'}[]=[];
+
     files.forEach(file=>{
       const isVideo = file.type.startsWith('video/');
       const isImage = file.type.startsWith('image/');
@@ -93,6 +107,7 @@ const ChatInput: React.FC<Props> = ({ onSend, onSendMedia, onSendTrack, libraryT
         newPreviews.push({url:URL.createObjectURL(file),type:isVideo?'video':'image'});
       }
     });
+
     setSelectedMedia(prev=>[...prev,...validFiles]);
     setMediaPreviews(prev=>[...prev,...newPreviews]);
     setIsExpanded(false);
@@ -120,7 +135,7 @@ const ChatInput: React.FC<Props> = ({ onSend, onSendMedia, onSendTrack, libraryT
       {/* Emoji Picker */}
       <AnimatePresence>
         {showEmojiPicker && (
-          <motion.div initial={{opacity:0,scale:0.9,y:10}} animate={{opacity:1,scale:1,y:0}} exit={{opacity:0,scale:0.9,y:10}} className="absolute bottom-full mb-3 right-3 glass-high p-3 rounded-2xl border border-white/10 shadow-xl z-50 bg-[#0a0a0a]/95 backdrop-blur-xl">
+          <motion.div initial={{opacity:0,scale:0.9,y:10}} animate={{opacity:1,scale:1,y:0}} exit={{opacity:0,scale:0.9,y:10}} className="absolute bottom-full mb-3 right-3 glass-high p-3 rounded-2xl border border-white/10 shadow-xl bg-[#0a0a0a]/95 backdrop-blur-xl z-50">
             <div className="grid grid-cols-6 gap-2">
               {EMOJI_LIST.map(e=><motion.button key={e} whileHover={{scale:1.2}} whileTap={{scale:0.9}} onClick={()=>addEmoji(e)} className="text-lg">{e}</motion.button>)}
             </div>
