@@ -1,11 +1,5 @@
-import React, { useRef } from 'react';
-import { 
-  motion, 
-  useMotionValue, 
-  useTransform, 
-  useAnimation, 
-  PanInfo 
-} from 'framer-motion';
+import React from 'react';
+import { motion, useMotionValue, useTransform, useAnimation, PanInfo } from 'framer-motion';
 import { Reply } from 'lucide-react';
 
 interface Props {
@@ -17,76 +11,65 @@ interface Props {
 const SwipeableMessage: React.FC<Props> = ({ children, onReply, isMe }) => {
   const controls = useAnimation();
   const x = useMotionValue(0);
-  const containerRef = useRef<HTMLDivElement>(null);
 
-  // CONFIGURATION
-  const DRAG_THRESHOLD = 50; // How far to drag to trigger reply
+  // CONSTRAINTS & ANIMATIONS
+  // If it's my message (right side), we drag left (negative x).
+  // If it's their message (left side), we drag right (positive x).
   
-  // ANIMATION TRANSFORMS
-  // isMe = true (Right side) -> Drag Left (Negative X)
-  // isMe = false (Left side) -> Drag Right (Positive X)
-  
-  const inputLeft = [0, DRAG_THRESHOLD];
-  const inputRight = [-DRAG_THRESHOLD, 0];
-  const inputValue = isMe ? inputRight : inputLeft;
+  // 1. Drag Limits
+  const dragConstraints = isMe ? { left: -100, right: 0 } : { left: 0, right: 100 };
 
-  // Icon Animations
-  const opacity = useTransform(x, inputValue, [0, 1]);
-  const scale = useTransform(x, inputValue, [0.5, 1.1]);
-  
-  // Drag Handler
+  // 2. Icon Transformations based on drag distance (x)
+  // We map the drag distance to opacity, scale, and rotation of the reply icon.
+  const inputRange = isMe ? [-50, -20] : [20, 50];
+  const opacity = useTransform(x, inputRange, [1, 0]);
+  const scale = useTransform(x, inputRange, [1.1, 0.6]);
+  const rotate = useTransform(x, inputRange, isMe ? [-180, 0] : [0, 180]);
+
   const handleDragEnd = async (_: any, info: PanInfo) => {
     const offset = info.offset.x;
-    const velocity = info.velocity.x;
+    const threshold = 60; // Distance required to trigger reply
 
-    // Check if dragged far enough or flicked fast enough
-    const isSwiped = isMe 
-      ? offset < -DRAG_THRESHOLD || velocity < -500 
-      : offset > DRAG_THRESHOLD || velocity > 500;
+    // Check if dragged far enough
+    const shouldReply = isMe ? offset < -threshold : offset > threshold;
 
-    if (isSwiped) {
-      // Trigger Haptic Feedback
-      if (navigator.vibrate) navigator.vibrate(15);
-      
-      // Trigger Action
+    if (shouldReply) {
       onReply();
+      // Haptic feedback for mobile feel
+      if (typeof navigator !== 'undefined' && navigator.vibrate) {
+        navigator.vibrate(50);
+      }
     }
 
-    // Always snap back to origin
-    await controls.start({ x: 0, transition: { type: 'spring', stiffness: 400, damping: 25 } });
+    // Always snap back to original position
+    await controls.start({ x: 0 });
   };
 
   return (
-    <div 
-      ref={containerRef}
-      className={`relative w-full flex items-center ${isMe ? 'justify-end' : 'justify-start'} py-0.5 group`}
-    >
-      {/* --- BACKGROUND ICON LAYER --- */}
+    <div className={`relative w-full flex items-center ${isMe ? 'justify-end' : 'justify-start'} group`}>
+      {/* --- THE REPLY ICON LAYER (Behind the message) --- */}
       <div 
-        className={`absolute top-0 bottom-0 flex items-center justify-center pointer-events-none z-0 ${
-          isMe ? 'right-2' : 'left-2'
+        className={`absolute top-0 bottom-0 flex items-center justify-center pointer-events-none ${
+          isMe ? 'right-4' : 'left-4'
         }`}
       >
         <motion.div 
-          style={{ opacity, scale, x: isMe ? 10 : -10 }}
-          className="w-8 h-8 rounded-full bg-white/10 backdrop-blur-md border border-white/10 flex items-center justify-center text-white shadow-lg"
+          style={{ opacity, scale, rotate }}
+          className="w-8 h-8 rounded-full bg-white/10 backdrop-blur-md flex items-center justify-center text-white shadow-sm"
         >
-          <Reply size={16} className={isMe ? "" : "-scale-x-100"} />
+          <Reply size={16} />
         </motion.div>
       </div>
 
-      {/* --- FOREGROUND MESSAGE LAYER --- */}
+      {/* --- THE DRAGGABLE MESSAGE BUBBLE --- */}
       <motion.div
         drag="x"
-        dragConstraints={{ left: 0, right: 0 }} // Constraints are 0 to force spring back, but dragElastic allows movement
-        dragElastic={{ 
-          left: isMe ? 0.3 : 0.05, // Allow drag mainly in the correct direction
-          right: isMe ? 0.05 : 0.3 
-        }}
+        dragConstraints={dragConstraints}
+        dragElastic={0.05} // High resistance for that "premium" weighted feel
         onDragEnd={handleDragEnd}
         animate={controls}
-        style={{ x, touchAction: 'pan-y' }} // pan-y ensures vertical scrolling still works
-        className="relative z-10 max-w-full"
+        style={{ x, touchAction: 'pan-y' }} // Important: allows vertical scrolling while touching this
+        className="z-10 relative max-w-[85%]"
       >
         {children}
       </motion.div>
