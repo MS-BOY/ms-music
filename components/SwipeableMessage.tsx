@@ -12,64 +12,66 @@ const SwipeableMessage: React.FC<Props> = ({ children, onReply, isMe }) => {
   const controls = useAnimation();
   const x = useMotionValue(0);
 
-  // CONSTRAINTS & ANIMATIONS
-  // If it's my message (right side), we drag left (negative x).
-  // If it's their message (left side), we drag right (positive x).
-  
-  // 1. Drag Limits
-  const dragConstraints = isMe ? { left: -100, right: 0 } : { left: 0, right: 100 };
+  // 1. Drag Limits: How far the bubble can actually move
+  const dragConstraints = isMe ? { left: -120, right: 0 } : { left: 0, right: 120 };
 
-  // 2. Icon Transformations based on drag distance (x)
-  // We map the drag distance to opacity, scale, and rotation of the reply icon.
-  const inputRange = isMe ? [-50, -20] : [20, 50];
-  const opacity = useTransform(x, inputRange, [1, 0]);
-  const scale = useTransform(x, inputRange, [1.1, 0.6]);
-  const rotate = useTransform(x, inputRange, isMe ? [-180, 0] : [0, 180]);
+  // 2. Icon Transformations
+  // Icon becomes visible and scales up as we pull
+  const opacity = useTransform(x, isMe ? [0, -60] : [0, 60], [0, 1]);
+  const scale = useTransform(x, isMe ? [0, -60] : [0, 60], [0.5, 1.2]);
+  
+  // Icon moves slightly with the drag for a "pulling" effect
+  const iconX = useTransform(x, isMe ? [0, -100] : [0, 100], isMe ? [20, 0] : [-20, 0]);
 
   const handleDragEnd = async (_: any, info: PanInfo) => {
     const offset = info.offset.x;
-    const threshold = 60; // Distance required to trigger reply
+    const threshold = 60; // Point where reply is triggered
 
-    // Check if dragged far enough
     const shouldReply = isMe ? offset < -threshold : offset > threshold;
 
     if (shouldReply) {
       onReply();
-      // Haptic feedback for mobile feel
+      // Physical haptic feedback
       if (typeof navigator !== 'undefined' && navigator.vibrate) {
-        navigator.vibrate(50);
+        navigator.vibrate(40);
       }
     }
 
-    // Always snap back to original position
-    await controls.start({ x: 0 });
+    // Snap back with a high-quality spring
+    await controls.start({ 
+      x: 0, 
+      transition: { type: 'spring', stiffness: 600, damping: 35 } 
+    });
   };
 
   return (
-    <div className={`relative w-full flex items-center ${isMe ? 'justify-end' : 'justify-start'} group`}>
-      {/* --- THE REPLY ICON LAYER (Behind the message) --- */}
+    <div className={`relative w-full flex items-center ${isMe ? 'justify-end' : 'justify-start'} group mb-1`}>
+      {/* --- BACKGROUND REPLY ICON --- */}
       <div 
-        className={`absolute top-0 bottom-0 flex items-center justify-center pointer-events-none ${
-          isMe ? 'right-4' : 'left-4'
+        className={`absolute top-0 bottom-0 flex items-center ${
+          isMe ? 'right-0 pr-8' : 'left-0 pl-8'
         }`}
       >
         <motion.div 
-          style={{ opacity, scale, rotate }}
-          className="w-8 h-8 rounded-full bg-white/10 backdrop-blur-md flex items-center justify-center text-white shadow-sm"
+          style={{ opacity, scale, x: iconX }}
+          className={`w-9 h-9 rounded-full flex items-center justify-center shadow-lg backdrop-blur-xl ${
+            isMe ? 'bg-blue-500/20 text-blue-400' : 'bg-white/10 text-white/60'
+          } border border-white/10`}
         >
-          <Reply size={16} />
+          <Reply size={18} strokeWidth={2.5} />
         </motion.div>
       </div>
 
-      {/* --- THE DRAGGABLE MESSAGE BUBBLE --- */}
+      {/* --- DRAGGABLE CONTENT --- */}
       <motion.div
         drag="x"
         dragConstraints={dragConstraints}
-        dragElastic={0.05} // High resistance for that "premium" weighted feel
+        dragElastic={0.15} // Resistance feel
         onDragEnd={handleDragEnd}
         animate={controls}
-        style={{ x, touchAction: 'pan-y' }} // Important: allows vertical scrolling while touching this
-        className="z-10 relative max-w-[85%]"
+        whileDrag={{ cursor: 'grabbing' }}
+        style={{ x, touchAction: 'pan-y' }}
+        className="z-10 relative w-full flex flex-col"
       >
         {children}
       </motion.div>
