@@ -70,6 +70,8 @@ const ChatScreen: React.FC<Props> = ({ onBack, onSettings, hasPlayer, tracks, on
     };
   }, []);
 
+  
+
   // --- Member count ---
   useEffect(() => {
     const unsub = onSnapshot(collection(db, 'users'), snapshot => setMemberCount(snapshot.size));
@@ -77,16 +79,24 @@ const ChatScreen: React.FC<Props> = ({ onBack, onSettings, hasPlayer, tracks, on
   }, []);
 
   // --- Messages ---
-  useEffect(() => {
-    const messagesRef = collection(db, 'groups', GROUP_ID, 'messages');
-    const q = query(messagesRef, orderBy('timestamp', 'asc'));
-    const unsub = onSnapshot(q, snapshot => {
-      const msgs = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Message));
-      setMessages(msgs);
-      setOptimisticMessages(prev => prev.filter(om => !msgs.some(m => m.timestamp === om.timestamp)));
-    });
-    return () => unsub();
-  }, []);
+  <div ref={scrollRef} className={`flex-1 overflow-y-auto no-scrollbar scroll-smooth space-y-6 pb-24 px-4 ${mainContentPadding}`}>
+  {combinedMessages.map((msg, idx) => (
+    <MessageBubble
+      key={msg.id}
+      message={msg}
+      isMe={msg.senderId === auth.currentUser?.uid}
+      showAvatar={idx === 0 || combinedMessages[idx-1].senderId !== msg.senderId}
+      onOpenMenu={handleOpenMenu}
+      onMediaClick={(url, all) => { 
+        setViewerItems(all); 
+        setViewerIndex(all.findIndex(i => i.url === url)); 
+        setViewerOpen(true); 
+      }}
+      onSelectTrack={onSelectTrack}
+      onReply={() => setReplyingTo(msg)}  // <-- Swipe-to-Reply functional
+    />
+  ))}
+</div>
 
   // --- Scroll to bottom ---
   useLayoutEffect(() => {
