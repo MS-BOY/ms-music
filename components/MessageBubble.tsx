@@ -1,7 +1,7 @@
 import React, { useRef } from 'react';
-import { motion, AnimatePresence } from 'framer-motion';
+import { motion, AnimatePresence, useMotionValue, useTransform, useAnimation, PanInfo } from 'framer-motion';
 import { Message, Track } from '../types';
-import { CornerUpLeft, Play, Music, Film } from 'lucide-react';
+import { CornerUpLeft, Play, Music, Film, Reply } from 'lucide-react';
 
 interface Props {
   message: Message;
@@ -10,13 +10,37 @@ interface Props {
   onOpenMenu?: (e: React.MouseEvent | React.TouchEvent, message: Message) => void;
   onMediaClick?: (url: string, allMedia: {url: string, type: 'image' | 'video'}[]) => void;
   onSelectTrack?: (track: Track) => void;
-  onSwipeReply?: (message: Message) => void; // ✅ new prop for swipe reply
+  onSwipeReply?: (message: Message) => void;
 }
 
 const MessageBubble: React.FC<Props> = ({ message, isMe, showAvatar, onOpenMenu, onMediaClick, onSelectTrack, onSwipeReply }) => {
-  const longPressTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const SWIPE_THRESHOLD = 80; // px
+  /** ----- Swipe Logic ----- **/
+  const controls = useAnimation();
+  const x = useMotionValue(0);
+  const isDragging = useRef(false);
 
+  const dragThreshold = 60;
+  const dragConstraints = isMe ? { left: -80, right: 0 } : { left: 0, right: 80 };
+
+  const inputMap = isMe ? [-dragThreshold, -20] : [20, dragThreshold];
+  const opacity = useTransform(x, inputMap, [1, 0]);
+  const scale = useTransform(x, inputMap, [1.2, 0.7]);
+  const rotate = useTransform(x, inputMap, isMe ? [-180, 0] : [0, 180]);
+
+  const handleDragEnd = async (_: any, info: PanInfo) => {
+    isDragging.current = false;
+    const offset = info.offset.x;
+
+    if ((!isMe && offset > dragThreshold) || (isMe && offset < -dragThreshold)) {
+      onSwipeReply?.(message);
+      if (typeof navigator !== 'undefined' && navigator.vibrate) navigator.vibrate(40);
+    }
+
+    await controls.start({ x: 0, transition: { type: 'spring', stiffness: 400, damping: 35 } });
+  };
+
+  /** ----- Original Bubble Logic ----- **/
+  const longPressTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const isUnsent = message.isUnsent;
   const isSending = message.status === 'sending';
   const progress = message.uploadProgress || 0;
@@ -127,7 +151,6 @@ const MessageBubble: React.FC<Props> = ({ message, isMe, showAvatar, onOpenMenu,
                     </div>
                   )}
                 </div>
-
                 <AnimatePresence>
                   {isSending && (
                     <motion.div 
@@ -176,61 +199,74 @@ const MessageBubble: React.FC<Props> = ({ message, isMe, showAvatar, onOpenMenu,
     }
   };
 
+  /** ----- Render with Swipe ----- **/
   return (
-    <motion.div
-      initial={{ opacity: 0, scale: 0.98, y: 10 }}
-      animate={{ opacity: 1, scale: 1, y: 0 }}
-      transition={{ type: 'spring', damping: 28 }}
-      drag="x" // ✅ swipe
-      dragConstraints={{ left: isMe ? -120 : 0, right: isMe ? 0 : 120 }}
-      dragElastic={0.2}
-      onDragEnd={(e, info) => {
-        if (!onSwipeReply) return;
-        if (!isMe && info.offset.x > SWIPE_THRESHOLD) onSwipeReply(message);
-        if (isMe && info.offset.x < -SWIPE_THRESHOLD) onSwipeReply(message);
-      }}
-      onContextMenu={handleContextMenu}
-      onTouchStart={handleTouchStart}
-      onTouchEnd={handleTouchEnd}
-      className={`flex flex-col ${isMe ? 'items-end' : 'items-start'} select-none`}
-    >
-      <div className={`flex gap-3 max-w-[92%] ${isMe ? 'flex-row-reverse' : 'flex-row'}`}>
-        {!isMe && showAvatar && (
-          <div className="w-9 h-9 rounded-2xl overflow-hidden shrink-0 border border-white/10 shadow-lg mt-auto mb-1">
-            <img src={message.senderAvatar} alt={message.senderName} className="w-full h-full object-cover" />
-          </div>
-        )}
-        {!isMe && !showAvatar && <div className="w-9" />}
-
-        <div className="relative group flex flex-col">
-          {showAvatar && !isMe && <p className="text-[10px] font-black text-white/20 uppercase tracking-[0.2em] mb-1.5 ml-1.5">{message.senderName}</p>}
-          {message.replyTo && !isUnsent && (
-            <div className={`mb-1.5 px-3 py-2 bg-white/[0.03] rounded-2xl border-l-2 border-blue-500/50 flex flex-col text-[11px] ${isMe ? 'self-end mr-1' : 'ml-1'}`}>
-              <div className="flex items-center gap-1.5 text-blue-400/80 font-black mb-0.5">
-                <CornerUpLeft size={10} />
-                <span className="uppercase tracking-tight">{message.replyTo.senderName}</span>
-              </div>
-              <span className="text-white/30 line-clamp-1 italic text-[10px]">{message.replyTo.content}</span>
-            </div>
-          )}
-
-          <motion.div className={`relative overflow-hidden transition-all duration-300 ${isMediaOnly ? 'bg-transparent p-0 shadow-none' : 'glass px-4.5 py-3.5 shadow-[0_10px_40px_rgba(0,0,0,0.4)]'} ${!isMediaOnly && !isUnsent ? (isMe ? 'bg-blue-600/10 rounded-[28px] rounded-tr-[4px] border-blue-500/10' : 'bg-white/[0.05] rounded-[28px] rounded-tl-[4px] border-white/5') : ''} ${isUnsent ? 'bg-white/[0.02] border border-white/[0.05] p-3 rounded-[24px] italic text-white/40' : ''}`}>
-            {renderContent()}
-            <div className={`flex items-center gap-2 ${isMediaOnly ? 'mt-1.5 px-2' : 'mt-2'} ${isMe ? 'justify-end' : 'justify-start'}`}>
-              {message.isEdited && !isUnsent && <span className="text-[9px] text-white/20 font-black uppercase tracking-widest">Edited</span>}
-              <span className="text-[9px] text-white/25 font-bold tabular-nums">{new Date(message.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
-              {isSending && <div className="w-1.5 h-1.5 rounded-full bg-blue-500/50 animate-pulse" />}
-            </div>
-          </motion.div>
-
-          {message.reactions && message.reactions.length > 0 && !isUnsent && (
-            <motion.div initial={{ scale: 0 }} animate={{ scale: 1 }} className={`absolute -bottom-2 ${isMe ? 'right-2' : 'left-2'} glass-high px-2 h-6 rounded-full flex items-center justify-center text-[12px] shadow-2xl border border-white/10 gap-0.5 z-10`}>
-              {message.reactions.map((r, i) => <span key={i} className="drop-shadow-sm">{r}</span>)}
-            </motion.div>
-          )}
-        </div>
+    <div className="relative w-full flex flex-col select-none">
+      {/* Reply Icon */}
+      <div className="absolute flex items-center justify-center pointer-events-none top-1/2 transform -translate-y-1/2">
+        <motion.div
+          style={{ opacity, scale, rotate }}
+          className="w-9 h-9 rounded-full bg-blue-500/20 backdrop-blur-md flex items-center justify-center text-blue-400 border border-blue-500/20"
+        >
+          <Reply size={18} strokeWidth={2.5} />
+        </motion.div>
       </div>
-    </motion.div>
+
+      {/* Draggable Message */}
+      <motion.div
+        drag="x"
+        dragConstraints={dragConstraints}
+        dragElastic={0.1}
+        onDragStart={() => { isDragging.current = true; }}
+        onDragEnd={handleDragEnd}
+        animate={controls}
+        style={{ x, touchAction: 'pan-y' }}
+      >
+        <motion.div
+          initial={{ opacity: 0, scale: 0.98, y: 10 }}
+          animate={{ opacity: 1, scale: 1, y: 0 }}
+          transition={{ type: 'spring', damping: 28 }}
+          onContextMenu={handleContextMenu}
+          onTouchStart={handleTouchStart}
+          onTouchEnd={handleTouchEnd}
+          className={`flex gap-3 max-w-[92%] ${isMe ? 'flex-row-reverse' : 'flex-row'} ${isMediaOnly ? '' : 'items-end'}`}
+        >
+          {!isMe && showAvatar && (
+            <div className="w-9 h-9 rounded-2xl overflow-hidden shrink-0 border border-white/10 shadow-lg mt-auto mb-1">
+              <img src={message.senderAvatar} alt={message.senderName} className="w-full h-full object-cover" />
+            </div>
+          )}
+          {!isMe && !showAvatar && <div className="w-9" />}
+
+          <div className="relative group flex flex-col">
+            {showAvatar && !isMe && <p className="text-[10px] font-black text-white/20 uppercase tracking-[0.2em] mb-1.5 ml-1.5">{message.senderName}</p>}
+            {message.replyTo && !isUnsent && (
+              <div className={`mb-1.5 px-3 py-2 bg-white/[0.03] rounded-2xl border-l-2 border-blue-500/50 flex flex-col text-[11px] ${isMe ? 'self-end mr-1' : 'ml-1'}`}>
+                <div className="flex items-center gap-1.5 text-blue-400/80 font-black mb-0.5">
+                  <CornerUpLeft size={10} />
+                  <span className="uppercase tracking-tight">{message.replyTo.senderName}</span>
+                </div>
+                <span className="text-white/30 line-clamp-1 italic text-[10px]">{message.replyTo.content}</span>
+              </div>
+            )}
+            <motion.div className={`relative overflow-hidden transition-all duration-300 ${isMediaOnly ? 'bg-transparent p-0 shadow-none' : 'glass px-4.5 py-3.5 shadow-[0_10px_40px_rgba(0,0,0,0.4)]'} ${!isMediaOnly && !isUnsent ? (isMe ? 'bg-blue-600/10 rounded-[28px] rounded-tr-[4px] border-blue-500/10' : 'bg-white/[0.05] rounded-[28px] rounded-tl-[4px] border-white/5') : ''} ${isUnsent ? 'bg-white/[0.02] border border-white/[0.05] p-3 rounded-[24px] italic text-white/40' : ''}`}>
+              {renderContent()}
+              <div className={`flex items-center gap-2 ${isMediaOnly ? 'mt-1.5 px-2' : 'mt-2'} ${isMe ? 'justify-end' : 'justify-start'}`}>
+                {message.isEdited && !isUnsent && <span className="text-[9px] text-white/20 font-black uppercase tracking-widest">Edited</span>}
+                <span className="text-[9px] text-white/25 font-bold tabular-nums">{new Date(message.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
+                {isSending && <div className="w-1.5 h-1.5 rounded-full bg-blue-500/50 animate-pulse" />}
+              </div>
+            </motion.div>
+
+            {message.reactions && message.reactions.length > 0 && !isUnsent && (
+              <motion.div initial={{ scale: 0 }} animate={{ scale: 1 }} className={`absolute -bottom-2 ${isMe ? 'right-2' : 'left-2'} glass-high px-2 h-6 rounded-full flex items-center justify-center text-[12px] shadow-2xl border border-white/10 gap-0.5 z-10`}>
+                {message.reactions.map((r, i) => <span key={i} className="drop-shadow-sm">{r}</span>)}
+              </motion.div>
+            )}
+          </div>
+        </motion.div>
+      </motion.div>
+    </div>
   );
 };
 
