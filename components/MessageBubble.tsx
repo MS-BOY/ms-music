@@ -10,7 +10,7 @@ interface Props {
   onOpenMenu?: (e: React.MouseEvent | React.TouchEvent, message: Message) => void;
   onMediaClick?: (url: string, allMedia: {url: string, type: 'image' | 'video'}[]) => void;
   onSelectTrack?: (track: Track) => void;
-  onSwipeReply?: (message: Message) => void; // ✅ NEW
+  onSwipeReply?: (message: Message) => void; // ✅ new prop for swipe reply
 }
 
 const MessageBubble: React.FC<Props> = ({ message, isMe, showAvatar, onOpenMenu, onMediaClick, onSelectTrack, onSwipeReply }) => {
@@ -181,17 +181,13 @@ const MessageBubble: React.FC<Props> = ({ message, isMe, showAvatar, onOpenMenu,
       initial={{ opacity: 0, scale: 0.98, y: 10 }}
       animate={{ opacity: 1, scale: 1, y: 0 }}
       transition={{ type: 'spring', damping: 28 }}
-      drag="x"
+      drag="x" // ✅ swipe
       dragConstraints={{ left: isMe ? -120 : 0, right: isMe ? 0 : 120 }}
       dragElastic={0.2}
       onDragEnd={(e, info) => {
         if (!onSwipeReply) return;
-        if (!isMe && info.offset.x > SWIPE_THRESHOLD) {
-          onSwipeReply(message);
-        }
-        if (isMe && info.offset.x < -SWIPE_THRESHOLD) {
-          onSwipeReply(message);
-        }
+        if (!isMe && info.offset.x > SWIPE_THRESHOLD) onSwipeReply(message);
+        if (isMe && info.offset.x < -SWIPE_THRESHOLD) onSwipeReply(message);
       }}
       onContextMenu={handleContextMenu}
       onTouchStart={handleTouchStart}
@@ -205,19 +201,19 @@ const MessageBubble: React.FC<Props> = ({ message, isMe, showAvatar, onOpenMenu,
           </div>
         )}
         {!isMe && !showAvatar && <div className="w-9" />}
-        
+
         <div className="relative group flex flex-col">
           {showAvatar && !isMe && <p className="text-[10px] font-black text-white/20 uppercase tracking-[0.2em] mb-1.5 ml-1.5">{message.senderName}</p>}
           {message.replyTo && !isUnsent && (
             <div className={`mb-1.5 px-3 py-2 bg-white/[0.03] rounded-2xl border-l-2 border-blue-500/50 flex flex-col text-[11px] ${isMe ? 'self-end mr-1' : 'ml-1'}`}>
-               <div className="flex items-center gap-1.5 text-blue-400/80 font-black mb-0.5">
-                 <CornerUpLeft size={10} />
-                 <span className="uppercase tracking-tight">{message.replyTo.senderName}</span>
-               </div>
-               <span className="text-white/30 line-clamp-1 italic text-[10px]">{message.replyTo.content}</span>
+              <div className="flex items-center gap-1.5 text-blue-400/80 font-black mb-0.5">
+                <CornerUpLeft size={10} />
+                <span className="uppercase tracking-tight">{message.replyTo.senderName}</span>
+              </div>
+              <span className="text-white/30 line-clamp-1 italic text-[10px]">{message.replyTo.content}</span>
             </div>
           )}
-          
+
           <motion.div className={`relative overflow-hidden transition-all duration-300 ${isMediaOnly ? 'bg-transparent p-0 shadow-none' : 'glass px-4.5 py-3.5 shadow-[0_10px_40px_rgba(0,0,0,0.4)]'} ${!isMediaOnly && !isUnsent ? (isMe ? 'bg-blue-600/10 rounded-[28px] rounded-tr-[4px] border-blue-500/10' : 'bg-white/[0.05] rounded-[28px] rounded-tl-[4px] border-white/5') : ''} ${isUnsent ? 'bg-white/[0.02] border border-white/[0.05] p-3 rounded-[24px] italic text-white/40' : ''}`}>
             {renderContent()}
             <div className={`flex items-center gap-2 ${isMediaOnly ? 'mt-1.5 px-2' : 'mt-2'} ${isMe ? 'justify-end' : 'justify-start'}`}>
