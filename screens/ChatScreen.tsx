@@ -1,310 +1,214 @@
-import React, { useState, useEffect, useRef, useLayoutEffect } from 'react';
-import { motion, AnimatePresence } from 'framer-motion';
-import { MoreVertical, ChevronLeft } from 'lucide-react';
-import { doc, onSnapshot, collection, query, orderBy, addDoc, updateDoc, setDoc, getDoc, deleteDoc } from 'firebase/firestore';
-import { db, auth } from '../firebase';
-import { MS_GROUP } from '../constants';
-import { Message, Group, Track } from '../types';
-import MessageBubble from '../components/MessageBubble';
-import ChatInput from '../components/ChatInput';
-import MediaViewer from '../components/MediaViewer';
-import TypingIndicator from '../components/TypingIndicator';
+import React, { useRef } from 'react';
+import { motion, AnimatePresence, useMotionValue, useTransform, useAnimation, PanInfo } from 'framer-motion';
+import { Message, Track } from '../types';
+import { CornerUpLeft, Play, Music, Film, Reply } from 'lucide-react';
 
 interface Props {
-  onBack: () => void;
-  onSettings: () => void;
-  hasPlayer?: boolean;
-  tracks: Track[];
-  onSelectTrack: (track: Track) => void;
+  message: Message;
+  isMe: boolean;
+  showAvatar: boolean;
+  onOpenMenu?: (e: React.MouseEvent | React.TouchEvent, message: Message) => void;
+  onMediaClick?: (url: string, allMedia: { url: string; type: 'image' | 'video' }[]) => void;
+  onSelectTrack?: (track: Track) => void;
+  onReply?: () => void;
 }
 
-const GROUP_ID = 'group-1';
-const REACTIONS = ['❤️', '😂', '😮', '😢', '😠', '👍'];
-const CLOUDINARY_UPLOAD_URL = "https://api.cloudinary.com/v1_1/dw3oixfbg/auto/upload";
-const CLOUDINARY_PRESET = "profile";
+const MessageBubble: React.FC<Props> = ({ message, isMe, showAvatar, onOpenMenu, onMediaClick, onSelectTrack, onReply }) => {
+  const longPressTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const isUnsent = message.isUnsent;
+  const isSending = message.status === 'sending';
+  const progress = message.uploadProgress || 0;
+  const isMediaOnly =
+    (message.type === 'image' || message.type === 'image-grid' || message.type === 'video' || message.type === 'music') &&
+    !isUnsent;
 
-const ChatScreen: React.FC<Props> = ({ onBack, onSettings, hasPlayer, tracks, onSelectTrack }) => {
-  const [messages, setMessages] = useState<Message[]>([]);
-  const [optimisticMessages, setOptimisticMessages] = useState<Message[]>([]);
-  const [groupData, setGroupData] = useState<Group>(MS_GROUP);
-  const [memberCount, setMemberCount] = useState(0);
-  const [typingUsers, setTypingUsers] = useState<any[]>([]);
-  const [replyingTo, setReplyingTo] = useState<Message | null>(null);
-  const [editingMessage, setEditingMessage] = useState<Message | null>(null);
-
-  const [menuOpen, setMenuOpen] = useState(false);
-  const [selectedMessage, setSelectedMessage] = useState<Message | null>(null);
-  const [menuPosition, setMenuPosition] = useState({ x: 0, y: 0 });
-
-  const [viewerOpen, setViewerOpen] = useState(false);
-  const [viewerItems, setViewerItems] = useState<{ url: string, type: 'image' | 'video' }[]>([]);
-  const [viewerIndex, setViewerIndex] = useState(0);
-
-  const scrollRef = useRef<HTMLDivElement>(null);
-
-  // --- Load group ---
-  useEffect(() => {
-    const groupRef = doc(db, 'groups', GROUP_ID);
-    getDoc(groupRef).then(snap => !snap.exists() && setDoc(groupRef, MS_GROUP));
-    const unsub = onSnapshot(groupRef, snap => snap.exists() && setGroupData(snap.data() as Group));
-    return () => unsub();
-  }, []);
-
-  // --- Typing users ---
-  useEffect(() => {
-    const typingRef = collection(db, 'groups', GROUP_ID, 'typing');
-    const unsub = onSnapshot(typingRef, snapshot => {
-      const now = Date.now();
-      const users = snapshot.docs
-        .map(doc => ({ id: doc.id, ...doc.data() } as any))
-        .filter(u => u.id !== auth.currentUser?.uid && (now - u.timestamp) < 5000);
-      setTypingUsers(users);
-    });
-    const interval = setInterval(() => {
-      const now = Date.now();
-      setTypingUsers(prev => prev.filter(u => (now - u.timestamp) < 5000));
-    }, 2000);
-    return () => {
-      unsub();
-      clearInterval(interval);
-    };
-  }, []);
-
-  
-
-  // --- Member count ---
-  useEffect(() => {
-    const unsub = onSnapshot(collection(db, 'users'), snapshot => setMemberCount(snapshot.size));
-    return () => unsub();
-  }, []);
-
-  // --- Messages ---
-  <div ref={scrollRef} className={`flex-1 overflow-y-auto no-scrollbar scroll-smooth space-y-6 pb-24 px-4 ${mainContentPadding}`}>
-  {combinedMessages.map((msg, idx) => (
-    <MessageBubble
-      key={msg.id}
-      message={msg}
-      isMe={msg.senderId === auth.currentUser?.uid}
-      showAvatar={idx === 0 || combinedMessages[idx-1].senderId !== msg.senderId}
-      onOpenMenu={handleOpenMenu}
-      onMediaClick={(url, all) => { 
-        setViewerItems(all); 
-        setViewerIndex(all.findIndex(i => i.url === url)); 
-        setViewerOpen(true); 
-      }}
-      onSelectTrack={onSelectTrack}
-      onReply={() => setReplyingTo(msg)}  // <-- Swipe-to-Reply functional
-    />
-  ))}
-</div>
-
-  // --- Scroll to bottom ---
-  useLayoutEffect(() => {
-    if (scrollRef.current) scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
-  }, [messages.length, optimisticMessages.length]);
-
-  // --- Cloudinary Upload ---
-  const uploadToCloudinary = async (file: File, onProgress: (p: number) => void): Promise<string> => {
-    const formData = new FormData();
-    formData.append('file', file);
-    formData.append('upload_preset', CLOUDINARY_PRESET);
-
-    return new Promise((resolve, reject) => {
-      const xhr = new XMLHttpRequest();
-      xhr.open('POST', CLOUDINARY_UPLOAD_URL, true);
-      xhr.upload.onprogress = e => e.lengthComputable && onProgress(Math.round((e.loaded / e.total) * 100));
-      xhr.onload = () => xhr.status === 200 ? resolve(JSON.parse(xhr.responseText).secure_url) : reject(new Error('Upload failed'));
-      xhr.onerror = () => reject(new Error('Network error'));
-      xhr.send(formData);
-    });
+  // --- Long Press Menu ---
+  const handleTouchStart = (e: React.TouchEvent) => {
+    if (!onOpenMenu || isSending) return;
+    longPressTimer.current = setTimeout(() => onOpenMenu(e, message), 500);
   };
-
-  // --- Send Text ---
-  const handleSendMessage = async (text: string) => {
-    if (!text.trim() || !auth.currentUser) return;
-    if (editingMessage) {
-      await updateDoc(doc(db, 'groups', GROUP_ID, 'messages', editingMessage.id), { content: text, isEdited: true });
-      setEditingMessage(null);
-      return;
-    }
-
-    const newMessage: Omit<Message, 'id'> = {
-      senderId: auth.currentUser.uid,
-      senderName: auth.currentUser.displayName || 'Anonymous',
-      senderAvatar: auth.currentUser.photoURL || 'https://picsum.photos/200',
-      content: text,
-      timestamp: Date.now(),
-      type: 'text',
-      reactions: [],
-      ...(replyingTo ? { replyTo: { id: replyingTo.id, senderName: replyingTo.senderName, content: replyingTo.content, type: replyingTo.type } } : {})
-    };
-    setReplyingTo(null);
-    await addDoc(collection(db, 'groups', GROUP_ID, 'messages'), newMessage);
-  };
-
-  // --- Send Media ---
-  const handleSendMedia = async (files: File[], type: 'image' | 'video' | 'audio') => {
-    if (!auth.currentUser || files.length === 0) return;
-    const timestamp = Date.now();
-    const tempId = `optimistic-${timestamp}`;
-    const localPreviews = files.map(f => URL.createObjectURL(f));
-
-    const optimisticMsg: Message = {
-      id: tempId,
-      senderId: auth.currentUser.uid,
-      senderName: auth.currentUser.displayName || 'Anonymous',
-      senderAvatar: auth.currentUser.photoURL || 'https://picsum.photos/200',
-      content: localPreviews[0],
-      attachments: localPreviews,
-      timestamp,
-      type: files.length > 1 ? 'image-grid' : (type === 'audio' ? 'audio' : (type === 'video' ? 'video' : 'image')),
-      reactions: [],
-      status: 'sending',
-      uploadProgress: 0
-    };
-
-    setOptimisticMessages(prev => [...prev, optimisticMsg]);
-    setReplyingTo(null);
-
-    try {
-      const uploadedUrls = await Promise.all(files.map(file => uploadToCloudinary(file, (p) => {
-        setOptimisticMessages(prev => prev.map(m => m.id === tempId ? { ...m, uploadProgress: p } : m));
-      })));
-      const finalMessage: Omit<Message, 'id'> = { ...optimisticMsg, content: uploadedUrls[0], attachments: uploadedUrls, status: 'sent', uploadProgress: 100 };
-      const { status, uploadProgress, id, ...dbMessage } = finalMessage as any;
-      await addDoc(collection(db, 'groups', GROUP_ID, 'messages'), dbMessage);
-    } catch (err) {
-      console.error(err);
-      setOptimisticMessages(prev => prev.filter(m => m.id !== tempId));
-      alert("Failed to send media.");
+  const handleTouchEnd = () => {
+    if (longPressTimer.current) {
+      clearTimeout(longPressTimer.current);
+      longPressTimer.current = null;
     }
   };
-
-  // --- Send Track ---
-  const handleSendTrack = async (track: Track) => {
-    if (!auth.currentUser) return;
-    const newMessage: Omit<Message, 'id'> = {
-      senderId: auth.currentUser.uid,
-      senderName: auth.currentUser.displayName || 'Anonymous',
-      senderAvatar: auth.currentUser.photoURL || 'https://picsum.photos/200',
-      content: JSON.stringify(track),
-      timestamp: Date.now(),
-      type: 'music',
-      reactions: [],
-    };
-    await addDoc(collection(db, 'groups', GROUP_ID, 'messages'), newMessage);
-  };
-
-  // --- Message menu ---
-  const handleOpenMenu = (e: React.MouseEvent | React.TouchEvent, msg: Message) => {
-    if (msg.id.startsWith('optimistic-')) return;
+  const handleContextMenu = (e: React.MouseEvent) => {
+    if (isSending) return;
     e.preventDefault();
-    const clientX = 'touches' in e ? e.touches[0].clientX : (e as React.MouseEvent).clientX;
-    const clientY = 'touches' in e ? e.touches[0].clientY : (e as React.MouseEvent).clientY;
-    const menuWidth = 224;
-    const x = Math.min(clientX, window.innerWidth - menuWidth - 20);
-    const y = Math.min(clientY, window.innerHeight - 300);
-    setMenuPosition({ x, y });
-    setSelectedMessage(msg);
-    setMenuOpen(true);
+    if (onOpenMenu) onOpenMenu(e, message);
   };
 
-  const handleReaction = async (emoji: string) => {
-    if (!selectedMessage) return;
-    const msgRef = doc(db, 'groups', GROUP_ID, 'messages', selectedMessage.id);
-    const existing = selectedMessage.reactions || [];
-    const newReactions = existing.includes(emoji) ? existing.filter(r => r !== emoji) : [...existing, emoji];
-    await updateDoc(msgRef, { reactions: newReactions });
-    setMenuOpen(false);
+  // --- Media items ---
+  const getMediaItems = (): { url: string; type: 'image' | 'video' }[] => {
+    const rawItems = message.attachments && message.attachments.length > 0 ? message.attachments : [message.content];
+    return rawItems.map((url) => ({
+      url,
+      type: url.match(/\.(mp4|webm|mov|ogg)$/i) ? 'video' : 'image',
+    }));
   };
 
-  const headerStickyTop = hasPlayer ? 'top-[72px]' : 'top-0';
-  const mainContentPadding = hasPlayer ? 'pt-[144px]' : 'pt-[72px]';
-  const combinedMessages = [...messages, ...optimisticMessages].sort((a, b) => a.timestamp - b.timestamp);
+  // --- Render content ---
+  const renderContent = () => {
+    if (isUnsent) {
+      return <p className="text-[13px] leading-relaxed text-white/40 italic font-medium">{message.content}</p>;
+    }
+
+    const mediaItems = getMediaItems();
+
+    switch (message.type) {
+      case 'music':
+        try {
+          const trackData = JSON.parse(message.content) as Track;
+          return (
+            <motion.div
+              whileHover={{ scale: 1.02, y: -2 }}
+              whileTap={{ scale: 0.98 }}
+              onClick={() => onSelectTrack?.(trackData)}
+              className="flex items-center gap-4 p-3 glass-high rounded-[28px] border border-white/10 cursor-pointer shadow-xl min-w-[240px] max-w-[300px] overflow-hidden group bg-cyan-500/5"
+            >
+              <div className="w-16 h-16 rounded-2xl overflow-hidden shadow-lg shrink-0 border border-white/10 relative">
+                <img src={trackData.albumArt} alt={trackData.title} className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-700" />
+                <div className="absolute inset-0 bg-black/40 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
+                  <Play size={20} fill="white" className="text-white ml-1" />
+                </div>
+              </div>
+              <div className="flex-1 min-w-0">
+                <div className="flex items-center gap-1.5 mb-1">
+                  <Music size={10} className="text-cyan-400" />
+                  <span className="text-[8px] font-black uppercase tracking-[0.2em] text-cyan-400/80">Shared Music</span>
+                </div>
+                <h4 className="font-black text-sm text-white uppercase truncate tracking-tight mb-0.5">{trackData.title}</h4>
+                <p className="text-[10px] font-black text-white/40 uppercase tracking-widest truncate">{trackData.artist}</p>
+              </div>
+            </motion.div>
+          );
+        } catch (e) {
+          return <p className="text-sm text-white/60 italic">Invalid track metadata</p>;
+        }
+      case 'image':
+      case 'video':
+      case 'image-grid':
+        const gridClass = mediaItems.length === 1 ? 'grid-cols-1' : 'grid-cols-2';
+        return (
+          <div className={`grid ${gridClass} gap-1.5 mt-0.5 mb-0.5 max-w-[260px] sm:max-w-[320px] relative transform-style-3d`}>
+            {mediaItems.map((item, idx) => (
+              <motion.div
+                key={`${message.id}-media-${idx}`}
+                whileHover={!isSending ? { scale: 1.01 } : {}}
+                onClick={() => !isSending && onMediaClick?.(item.url, mediaItems)}
+                className={`relative overflow-hidden rounded-[28px] bg-[#0a0a0a] border border-white/10 shadow-[0_15px_35px_rgba(0,0,0,0.5)] ${
+                  !isSending ? 'cursor-pointer group' : 'cursor-default'
+                } ${mediaItems.length === 3 && idx === 2 ? 'col-span-2' : ''}`}
+                style={{ transformStyle: 'preserve-3d' }}
+              >
+                {item.type === 'video' ? (
+                  <div className="relative aspect-[4/5] sm:aspect-square flex items-center justify-center bg-black">
+                    <video src={`${item.url}#t=0.1`} className="w-full h-full object-cover" muted playsInline />
+                    <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-black/20" />
+                    <div className="absolute top-3 left-3 px-2 py-1 glass-high rounded-lg border border-white/10 flex items-center gap-1.5 pointer-events-none">
+                      <Film size={10} className="text-blue-400" />
+                      <span className="text-[8px] font-black uppercase tracking-widest text-white/80 leading-none">Video</span>
+                    </div>
+                    {!isSending && (
+                      <div className="absolute inset-0 flex items-center justify-center bg-black/10 group-hover:bg-transparent transition-colors">
+                        <motion.div whileHover={{ scale: 1.1 }} whileTap={{ scale: 0.9 }} className="w-14 h-14 rounded-full glass-high flex items-center justify-center border border-white/20 shadow-2xl">
+                          <Play size={24} fill="white" className="text-white ml-1" />
+                        </motion.div>
+                      </div>
+                    )}
+                  </div>
+                ) : (
+                  <div className="relative aspect-square">
+                    <img src={item.url} alt="Shared" className="w-full h-full object-cover min-h-[140px]" />
+                    <div className="absolute inset-0 bg-gradient-to-t from-black/40 via-transparent to-transparent pointer-events-none" />
+                  </div>
+                )}
+              </motion.div>
+            ))}
+          </div>
+        );
+      case 'audio':
+        return (
+          <div className="flex items-center gap-3 min-w-[220px] p-2 glass rounded-[20px] border border-white/5">
+            <div className="w-10 h-10 rounded-xl bg-blue-500/10 flex items-center justify-center shrink-0 border border-blue-500/20">
+              <Music size={20} className="text-blue-400" />
+            </div>
+            <audio src={message.content} controls className="w-full h-8 opacity-60 scale-90 origin-left" />
+          </div>
+        );
+      default:
+        return <p className="text-[15px] leading-relaxed text-white/90">{message.content}</p>;
+    }
+  };
+
+  // --- Swipe-to-Reply Logic ---
+  const controls = useAnimation();
+  const x = useMotionValue(0);
+  const isDragging = useRef(false);
+  const dragThreshold = 60;
+  const dragConstraints = isMe ? { left: -80, right: 0 } : { left: 0, right: 80 };
+  const inputMap = isMe ? [-dragThreshold, -20] : [20, dragThreshold];
+  const opacity = useTransform(x, inputMap, [1, 0]);
+  const scale = useTransform(x, inputMap, [1.2, 0.7]);
+  const rotate = useTransform(x, inputMap, isMe ? [-180, 0] : [0, 180]);
+
+  const handleDragEnd = async (_: any, info: PanInfo) => {
+    isDragging.current = false;
+    const offset = info.offset.x;
+
+    if ((!isMe && offset > dragThreshold) || (isMe && offset < -dragThreshold)) {
+      onReply?.();
+      if (typeof navigator !== 'undefined' && navigator.vibrate) navigator.vibrate(40);
+    }
+
+    await controls.start({ x: 0, transition: { type: 'spring', stiffness: 400, damping: 35 } });
+  };
 
   return (
-    <div className="flex flex-col h-screen w-full bg-[#050505] overflow-hidden">
-      {/* Header */}
-      <header className={`fixed left-0 right-0 h-[72px] z-[90] glass bg-black/60 border-b border-white/5 flex items-center justify-between px-6 backdrop-blur-[40px] ${headerStickyTop}`}>
-        <div className="flex items-center gap-4">
-          <button onClick={onBack} className="p-2 -ml-2 rounded-full hover:bg-white/10 text-white/70 transition-colors"><ChevronLeft size={24} /></button>
-          <div className="flex items-center gap-3 cursor-pointer" onClick={onSettings}>
-            <div className="w-10 h-10 rounded-xl overflow-hidden border border-white/10 shadow-lg relative">
-              <img src={groupData.photo} alt={groupData.name} className="w-full h-full object-cover" />
-              <div className="absolute bottom-0 right-0 w-2.5 h-2.5 bg-emerald-500 rounded-full border-2 border-[#050505]" />
-            </div>
-            <div>
-              <h2 className="text-sm font-black uppercase tracking-tighter">{groupData.name}</h2>
-              <p className="text-[9px] text-blue-400 font-black uppercase tracking-widest">{memberCount} Members Online</p>
-            </div>
-          </div>
+    <div className={`relative w-full flex items-center ${isMe ? 'justify-end' : 'justify-start'} py-1 group`}>
+      {/* Reply Icon */}
+      <div className={`absolute flex items-center justify-center pointer-events-none ${isMe ? 'right-6' : 'left-6'}`}>
+        <motion.div style={{ opacity, scale, rotate }} className="w-9 h-9 rounded-full bg-blue-500/20 backdrop-blur-md flex items-center justify-center text-blue-400 border border-blue-500/20">
+          <Reply size={18} strokeWidth={2.5} />
+        </motion.div>
+      </div>
+
+      {/* Message Bubble */}
+      <motion.div
+        drag="x"
+        dragConstraints={dragConstraints}
+        dragElastic={0.1}
+        onDragStart={() => {
+          isDragging.current = true;
+        }}
+        onDragEnd={handleDragEnd}
+        animate={controls}
+        style={{ x, touchAction: 'pan-y' }}
+        onContextMenu={handleContextMenu}
+        onTouchStart={handleTouchStart}
+        onTouchEnd={handleTouchEnd}
+        className={`z-10 relative max-w-[88%] will-change-transform`}
+      >
+        {renderContent()}
+        <div className={`flex items-center gap-2 ${isMediaOnly ? 'mt-1.5 px-2' : 'mt-2'} ${isMe ? 'justify-end' : 'justify-start'}`}>
+          {message.isEdited && !isUnsent && <span className="text-[9px] text-white/20 font-black uppercase tracking-widest">Edited</span>}
+          <span className="text-[9px] text-white/25 font-bold tabular-nums">{new Date(message.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
+          {isSending && <div className="w-1.5 h-1.5 rounded-full bg-blue-500/50 animate-pulse" />}
         </div>
-        <button onClick={onSettings} className="p-2 rounded-full hover:bg-white/10 text-white/40"><MoreVertical size={20} /></button>
-      </header>
 
-      {/* Messages */}
-      <div ref={scrollRef} className={`flex-1 overflow-y-auto no-scrollbar scroll-smooth space-y-6 pb-24 px-4 ${mainContentPadding}`}>
-        {combinedMessages.map((msg, idx) => (
-          <MessageBubble
-            key={msg.id}
-            message={msg}
-            isMe={msg.senderId === auth.currentUser?.uid}
-            showAvatar={idx === 0 || combinedMessages[idx-1].senderId !== msg.senderId}
-            onOpenMenu={handleOpenMenu}
-            onMediaClick={(url, all) => { setViewerItems(all); setViewerIndex(all.findIndex(i => i.url === url)); setViewerOpen(true); }}
-            onSelectTrack={onSelectTrack}
-            onReply={m => setReplyingTo(m)}
-          />
-        ))}
-      </div>
-
-      {/* Typing + Input */}
-      <div className="absolute bottom-0 left-0 right-0 z-20 bg-gradient-to-t from-black via-black/90 to-transparent flex flex-col items-center">
-        <AnimatePresence>
-          {typingUsers.length > 0 && (
-            <div className="px-6 w-full max-w-4xl flex justify-start">
-              <TypingIndicator users={typingUsers} />
-            </div>
-          )}
-        </AnimatePresence>
-        <ChatInput
-          onSend={handleSendMessage}
-          onSendMedia={handleSendMedia}
-          onSendTrack={handleSendTrack}
-          libraryTracks={tracks}
-          replyingTo={replyingTo}
-          onCancelReply={() => setReplyingTo(null)}
-          editingMessage={editingMessage}
-          onCancelEdit={() => setEditingMessage(null)}
-        />
-      </div>
-
-      {/* Context Menu */}
-      <AnimatePresence>
-        {menuOpen && selectedMessage && (
-          <>
-            <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="fixed inset-0 bg-black/40 z-[100] backdrop-blur-sm" onClick={() => setMenuOpen(false)} />
-            <motion.div initial={{ opacity: 0, scale: 0.9, y: 10 }} animate={{ opacity: 1, scale: 1, y: 0 }} exit={{ opacity: 0, scale: 0.9, y: 10 }} style={{ position: 'fixed', top: menuPosition.y, left: menuPosition.x }} className="z-[101] w-56 glass-high rounded-[28px] border border-white/10 shadow-2xl p-1.5 bg-[#0a0a0a]/95">
-              <div className="flex justify-around p-2 border-b border-white/5 mb-1">
-                {REACTIONS.map(emoji => <button key={emoji} onClick={() => handleReaction(emoji)} className="text-xl hover:scale-125 transition-transform p-1">{emoji}</button>)}
-              </div>
-              <button onClick={() => { navigator.clipboard.writeText(selectedMessage.content); setMenuOpen(false); }} className="w-full text-left px-4 py-3 hover:bg-white/5 rounded-2xl text-[13px] font-bold">Copy Message</button>
-              <button onClick={() => { setReplyingTo(selectedMessage); setMenuOpen(false); }} className="w-full text-left px-4 py-3 hover:bg-white/5 rounded-2xl text-[13px] font-bold">Reply</button>
-              {auth.currentUser?.uid === selectedMessage.senderId && selectedMessage.type === 'text' && (
-                <button onClick={() => { setEditingMessage(selectedMessage); setMenuOpen(false); }} className="w-full text-left px-4 py-3 hover:bg-white/5 rounded-2xl text-[13px] font-bold">Edit</button>
-              )}
-              {auth.currentUser?.uid === selectedMessage.senderId && (
-                <button onClick={async () => { await deleteDoc(doc(db, 'groups', GROUP_ID, 'messages', selectedMessage.id)); setMenuOpen(false); }} className="w-full text-left px-4 py-3 hover:bg-red-500/10 rounded-2xl text-[13px] font-bold text-red-500">Unsend</button>
-              )}
-            </motion.div>
-          </>
+        {message.reactions && message.reactions.length > 0 && !isUnsent && (
+          <motion.div initial={{ scale: 0 }} animate={{ scale: 1 }} className={`absolute -bottom-2 ${isMe ? 'right-2' : 'left-2'} glass-high px-2 h-6 rounded-full flex items-center justify-center text-[12px] shadow-2xl border border-white/10 gap-0.5 z-10`}>
+            {message.reactions.map((r, i) => (
+              <span key={i} className="drop-shadow-sm">
+                {r}
+              </span>
+            ))}
+          </motion.div>
         )}
-      </AnimatePresence>
-
-      {/* Media Viewer */}
-      <MediaViewer isOpen={viewerOpen} items={viewerItems} initialIndex={viewerIndex} onClose={() => setViewerOpen(false)} />
+      </motion.div>
     </div>
   );
 };
 
-export default ChatScreen;
+export default MessageBubble;
