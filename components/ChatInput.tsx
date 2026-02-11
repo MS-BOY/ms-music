@@ -1,13 +1,25 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Plus, Smile, Mic, Send, Camera, Image, Music as MusicIcon, X, CornerUpLeft, Edit2, Search } from 'lucide-react';
+import {
+  Plus,
+  Smile,
+  Mic,
+  Send,
+  Camera,
+  Image,
+  Music as MusicIcon,
+  X,
+  CornerUpLeft,
+  Edit2,
+  Search
+} from 'lucide-react';
 import { doc, setDoc, deleteDoc } from 'firebase/firestore';
 import { auth, db } from '../firebase';
 import { Message, Track } from '../types';
 
 interface Props {
   onSend: (text: string) => void;
-  onSendMedia: (files: File[], type: 'image' | 'video' | 'audio') => void;
+  onSendMedia: (files: File[], type: 'image' | 'video') => void;
   onSendTrack?: (track: Track) => void;
   libraryTracks?: Track[];
   replyingTo?: Message | null;
@@ -16,33 +28,10 @@ interface Props {
   onCancelEdit?: () => void;
 }
 
-const MAX_VIDEO_SIZE = 50 * 1024 * 1024;
 const GROUP_ID = 'group-1';
-const EMOJI_LIST = ['❤️','😂','🔥','🙌','😮','😢','💯','✨','🎵','🎹','🎸','🎧','⚡️','🌈','💎','👑','🚀','🛸','👾','🎉'];
+const MAX_VIDEO_SIZE = 50 * 1024 * 1024;
 
-/* ---------------- MEDIA DETECT ---------------- */
-
-const detectReplyType = (content: any): 'image' | 'video' | 'music' | 'text' => {
-  if (typeof content === 'object' && content?.title && content?.url) return 'music';
-  if (typeof content !== 'string') return 'text';
-
-  if (/\.(jpe?g|png|gif|webp)$/i.test(content)) return 'image';
-  if (/\.(mp4|webm|ogg)$/i.test(content)) return 'video';
-
-  if (content.includes('firebasestorage.googleapis.com') && content.includes('image'))
-    return 'image';
-  if (content.includes('firebasestorage.googleapis.com') && content.includes('video'))
-    return 'video';
-
-  if (content.includes('res.cloudinary.com') && content.includes('/image/'))
-    return 'image';
-  if (content.includes('res.cloudinary.com') && content.includes('/video/'))
-    return 'video';
-
-  return 'text';
-};
-
-/* ---------------- COMPONENT ---------------- */
+const EMOJI_LIST = ['❤️','😂','🔥','🙌','😮','😢','💯','✨','🎵','🎧','⚡','🌈','💎','👑','🚀'];
 
 const ChatInput: React.FC<Props> = ({
   onSend,
@@ -55,228 +44,165 @@ const ChatInput: React.FC<Props> = ({
   onCancelEdit
 }) => {
 
-  const [text,setText] = useState('');
-  const [isExpanded,setIsExpanded] = useState(false);
-  const [showMusicSelector,setShowMusicSelector] = useState(false);
-  const [showEmojiPicker,setShowEmojiPicker] = useState(false);
-  const [musicSearch,setMusicSearch] = useState('');
-  const [selectedMedia,setSelectedMedia] = useState<File[]>([]);
-  const [mediaPreviews,setMediaPreviews] = useState<{url:string,type:'image'|'video'}[]>([]);
-
+  const [text, setText] = useState('');
+  const [isExpanded, setIsExpanded] = useState(false);
+  const [showEmojiPicker, setShowEmojiPicker] = useState(false);
+  const [selectedMedia, setSelectedMedia] = useState<File[]>([]);
+  const [mediaPreviews, setMediaPreviews] = useState<any[]>([]);
   const inputRef = useRef<HTMLTextAreaElement>(null);
-  const typingTimeoutRef = useRef<ReturnType<typeof setTimeout>|null>(null);
-  const cameraInputRef = useRef<HTMLInputElement>(null);
-  const galleryInputRef = useRef<HTMLInputElement>(null);
 
-  /* ---------------- TYPING STATUS ---------------- */
+  /* ------------------ Reply Preview Helper ------------------ */
 
-  useEffect(()=>{
-    const user = auth.currentUser;
-    if(!user) return;
+  const getPreviewContent = (content: string) => {
+    if (!content) return '';
 
-    const typingDocRef = doc(db,'groups',GROUP_ID,'typing',user.uid);
+    if (content.includes('cloudinary.com')) {
+      if (content.match(/\.(jpg|jpeg|png|webp)/)) return '📷 Image';
+      if (content.match(/\.(mp4|webm|mov)/)) return '🎥 Video';
+      if (content.match(/\.mp3/)) return '🎵 Audio';
+    }
 
-    if(text.length>0){
-      setDoc(typingDocRef,{
-        name:user.displayName||'Someone',
-        avatar:user.photoURL||'https://picsum.photos/200',
-        timestamp:Date.now()
-      },{merge:true});
+    return content.length > 40 ? content.slice(0, 40) + '...' : content;
+  };
 
-      if(typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current);
-      typingTimeoutRef.current = setTimeout(()=>deleteDoc(typingDocRef),3000);
-    } else deleteDoc(typingDocRef);
+  /* ------------------ Send ------------------ */
 
-  },[text]);
-
-  useEffect(()=>{
-    if((replyingTo||editingMessage)&&inputRef.current) inputRef.current.focus();
-    if(editingMessage) setText(editingMessage.content);
-    else setText('');
-  },[replyingTo,editingMessage]);
-
-  /* ---------------- SEND ---------------- */
-
-  const handleSend = ()=>{
-    const user = auth.currentUser;
-    if(user) deleteDoc(doc(db,'groups',GROUP_ID,'typing',user.uid));
-
-    if(selectedMedia.length>0){
-      const hasVideo = selectedMedia.some(f=>f.type.startsWith('video/'));
-      onSendMedia(selectedMedia,hasVideo?'video':'image');
-
-      mediaPreviews.forEach(p=>URL.revokeObjectURL(p.url));
+  const handleSend = () => {
+    if (selectedMedia.length > 0) {
+      const hasVideo = selectedMedia.some(f => f.type.startsWith('video/'));
+      onSendMedia(selectedMedia, hasVideo ? 'video' : 'image');
       setSelectedMedia([]);
       setMediaPreviews([]);
-
-      if(text.trim()){
-        onSend(text);
-        setText('');
-      }
     }
-    else if(text.trim()){
-      onSend(text);
+
+    if (text.trim()) {
+      onSend(text.trim());
       setText('');
     }
 
-    if(inputRef.current) inputRef.current.style.height='auto';
     setShowEmojiPicker(false);
   };
 
-  /* ---------------- FILE SELECT ---------------- */
+  /* ------------------ File Select ------------------ */
 
-  const handleFileSelect=(e:React.ChangeEvent<HTMLInputElement>)=>{
-    const files = Array.from(e.target.files||[]) as File[];
-    if(files.length===0) return;
+  const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = Array.from(e.target.files || []);
+    const previews: any[] = [];
 
-    const validFiles:File[]=[];
-    const newPreviews:{url:string,type:'image'|'video'}[]=[];
-
-    files.forEach(file=>{
-      const isVideo = file.type.startsWith('video/');
-      const isImage = file.type.startsWith('image/');
-      if(isVideo && file.size>MAX_VIDEO_SIZE){
-        alert(`Video ${file.name} exceeds 50MB`);
+    files.forEach(file => {
+      if (file.type.startsWith('video/') && file.size > MAX_VIDEO_SIZE) {
+        alert('Video exceeds 50MB');
         return;
       }
-      if(isVideo||isImage){
-        validFiles.push(file);
-        newPreviews.push({
-          url:URL.createObjectURL(file),
-          type:isVideo?'video':'image'
-        });
-      }
+
+      previews.push({
+        url: URL.createObjectURL(file),
+        type: file.type.startsWith('video/') ? 'video' : 'image'
+      });
     });
 
-    setSelectedMedia(prev=>[...prev,...validFiles]);
-    setMediaPreviews(prev=>[...prev,...newPreviews]);
-    setIsExpanded(false);
-    e.target.value='';
+    setSelectedMedia(files);
+    setMediaPreviews(previews);
   };
 
-  const removeMedia=(idx:number)=>{
-    const item = mediaPreviews[idx];
-    if(item) URL.revokeObjectURL(item.url);
-    setSelectedMedia(prev=>prev.filter((_,i)=>i!==idx));
-    setMediaPreviews(prev=>prev.filter((_,i)=>i!==idx));
-  };
-
-  const addEmoji=(emoji:string)=>{
-    setText(prev=>prev+emoji);
-    inputRef.current?.focus();
-  };
-
-  const filteredTracks = libraryTracks.filter(t =>
-    t.title.toLowerCase().includes(musicSearch.toLowerCase()) ||
-    t.artist.toLowerCase().includes(musicSearch.toLowerCase())
-  );
-
-  /* ---------------- UI ---------------- */
+  /* ------------------ UI ------------------ */
 
   return (
-    <div className="px-3 py-3 relative z-20 w-full max-w-4xl">
+    <div className="relative w-full px-4 py-3">
 
-      <input type="file" ref={cameraInputRef} accept="image/*" capture="environment" className="hidden" onChange={handleFileSelect} />
-      <input type="file" ref={galleryInputRef} accept="image/*,video/*" multiple className="hidden" onChange={handleFileSelect} />
-
-      {/* -------- REPLY / EDIT PREVIEW -------- */}
-
+      {/* Reply Preview */}
       <AnimatePresence>
-        {(replyingTo||editingMessage) && (
-          <motion.div initial={{opacity:0,y:5}} animate={{opacity:1,y:0}} exit={{opacity:0,y:5}} className="mb-2">
-            <div className="glass flex items-center justify-between p-2 rounded-xl border border-white/10 bg-white/5">
-
-              <div className="flex items-center gap-2 overflow-hidden">
-
-                <div className="w-1 h-8 bg-blue-500 rounded-full" />
-
-                {(() => {
-                  const content = editingMessage?.content || replyingTo?.content;
-                  const type = detectReplyType(content);
-
-                  if(type === 'image'){
-                    return (
-                      <img
-                        src={content}
-                        className="w-16 h-12 object-cover rounded-md border border-white/10"
-                      />
-                    );
-                  }
-
-                  if(type === 'video'){
-                    return (
-                      <div className="relative w-16 h-12 rounded-md overflow-hidden border border-white/10">
-                        <video
-                          src={`${content}#t=0.1`}
-                          className="w-full h-full object-cover"
-                          muted
-                        />
-                        <div className="absolute inset-0 bg-black/40 flex items-center justify-center text-[10px] text-white">
-                          VIDEO
-                        </div>
-                      </div>
-                    );
-                  }
-
-                  if(type === 'music'){
-                    return (
-                      <div className="flex items-center gap-2">
-                        <img src={content.albumArt} className="w-10 h-10 rounded-md object-cover"/>
-                        <div className="flex flex-col text-[10px]">
-                          <span className="font-bold truncate">{content.title}</span>
-                          <span className="text-cyan-400 truncate">{content.artist}</span>
-                        </div>
-                      </div>
-                    );
-                  }
-
-                  return (
-                    <span className="truncate max-w-[200px] text-white/60 text-sm">
-                      {content}
-                    </span>
-                  );
-                })()}
-
+        {(replyingTo || editingMessage) && (
+          <motion.div
+            initial={{opacity:0,y:10}}
+            animate={{opacity:1,y:0}}
+            exit={{opacity:0,y:10}}
+            className="mb-2"
+          >
+            <div className="bg-white/5 border border-white/10 backdrop-blur-xl rounded-2xl p-3 flex justify-between items-center">
+              <div>
+                <div className="text-xs text-blue-400 font-semibold flex items-center gap-2">
+                  {editingMessage ? <Edit2 size={14}/> : <CornerUpLeft size={14}/>}
+                  {editingMessage ? 'Editing Message' : `Replying to ${replyingTo?.senderName}`}
+                </div>
+                <div className="text-xs text-white/60">
+                  {getPreviewContent(editingMessage?.content || replyingTo?.content || '')}
+                </div>
               </div>
-
               <button
-                onClick={editingMessage?onCancelEdit:onCancelReply}
-                className="p-1 hover:bg-white/10 rounded-full"
+                onClick={editingMessage ? onCancelEdit : onCancelReply}
+                className="p-2 hover:bg-white/10 rounded-full"
               >
-                <X size={16} className="text-white/40"/>
+                <X size={16}/>
               </button>
-
             </div>
           </motion.div>
         )}
       </AnimatePresence>
 
-      {/* -------- INPUT AREA -------- */}
+      {/* Media Preview */}
+      {mediaPreviews.length > 0 && (
+        <div className="flex gap-3 mb-3 overflow-x-auto">
+          {mediaPreviews.map((item, i) => (
+            <div key={i} className="relative w-24 h-24 rounded-xl overflow-hidden">
+              {item.type === 'video' ?
+                <video src={item.url} className="w-full h-full object-cover" /> :
+                <img src={item.url} className="w-full h-full object-cover" />
+              }
+            </div>
+          ))}
+        </div>
+      )}
 
-      <div className="glass rounded-2xl border border-white/10 p-1 flex items-end gap-1 bg-[#0a0a0a]/70 backdrop-blur-xl">
+      {/* Input Bar */}
+      <div className="flex items-center gap-2 bg-[#111] border border-white/10 rounded-3xl px-3 py-2 backdrop-blur-xl">
 
+        {/* Plus */}
+        <button
+          onClick={() => document.getElementById('fileInput')?.click()}
+          className="w-10 h-10 flex items-center justify-center rounded-full bg-white/10 hover:bg-white/20 text-white"
+        >
+          <Plus size={20}/>
+        </button>
+
+        <input
+          id="fileInput"
+          type="file"
+          multiple
+          accept="image/*,video/*"
+          hidden
+          onChange={handleFileSelect}
+        />
+
+        {/* Textarea */}
         <textarea
           ref={inputRef}
-          rows={1}
           value={text}
           onChange={(e)=>setText(e.target.value)}
           placeholder="Type a message..."
-          className="flex-1 bg-transparent outline-none text-sm text-white placeholder:text-white/30 resize-none max-h-24 py-2 px-2"
-          onKeyDown={e=>{
-            if(e.key==='Enter'&&!e.shiftKey){
-              e.preventDefault();
-              handleSend();
-            }
-          }}
+          className="flex-1 bg-transparent outline-none resize-none text-white text-sm py-2"
+          rows={1}
         />
 
-        <motion.button
-          whileTap={{scale:0.9}}
-          onClick={handleSend}
-          className="w-10 h-10 rounded-xl flex items-center justify-center bg-blue-600 text-white"
+        {/* Emoji */}
+        <button
+          onClick={()=>setShowEmojiPicker(!showEmojiPicker)}
+          className="w-10 h-10 flex items-center justify-center rounded-full bg-white/10 hover:bg-white/20 text-yellow-400"
         >
-          <Send size={16}/>
-        </motion.button>
+          <Smile size={20}/>
+        </button>
+
+        {/* Send / Mic */}
+        <button
+          onClick={handleSend}
+          className={`w-11 h-11 flex items-center justify-center rounded-full transition ${
+            text || selectedMedia.length > 0
+              ? 'bg-blue-600 text-white'
+              : 'bg-white/10 text-white'
+          }`}
+        >
+          {text || selectedMedia.length > 0 ? <Send size={18}/> : <Mic size={20}/>}
+        </button>
 
       </div>
     </div>
