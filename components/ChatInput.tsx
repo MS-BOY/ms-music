@@ -1,6 +1,5 @@
-
 import React, { useState, useRef, useEffect } from 'react';
-import { motion, AnimatePresence } from 'framer-motion';
+import { motion, AnimatePresence, PanInfo } from 'framer-motion'; // Added PanInfo
 import { Plus, Smile, Mic, Send, Camera, Image, Music as MusicIcon, X, CornerUpLeft, Edit2, Film, Search } from 'lucide-react';
 import { doc, setDoc, deleteDoc } from 'firebase/firestore';
 import { auth, db } from '../firebase';
@@ -154,6 +153,14 @@ const ChatInput: React.FC<Props> = ({
     }
   };
 
+  // SWIPE TO DISMISS HANDLER
+  const handleDragEnd = (_: any, info: PanInfo) => {
+    if (info.offset.x > 100) { // Swipe right 100px to cancel
+      if (editingMessage) onCancelEdit?.();
+      else onCancelReply?.();
+    }
+  };
+
   const filteredTracks = libraryTracks.filter(t => 
     t.title.toLowerCase().includes(musicSearch.toLowerCase()) ||
     t.artist.toLowerCase().includes(musicSearch.toLowerCase())
@@ -196,8 +203,12 @@ const ChatInput: React.FC<Props> = ({
           <motion.div 
             initial={{ opacity: 0, y: 10, height: 0 }} 
             animate={{ opacity: 1, y: 0, height: 'auto' }} 
-            exit={{ opacity: 0, y: 10, height: 0 }} 
-            className="mb-2 mx-1 overflow-hidden"
+            exit={{ opacity: 0, x: 200, opacity: 0 }} // Exits by sliding away
+            drag="x"
+            dragConstraints={{ left: 0, right: 150 }}
+            dragElastic={0.2}
+            onDragEnd={handleDragEnd}
+            className="mb-2 mx-1 overflow-hidden cursor-grab active:cursor-grabbing"
           >
             <div className={`glass flex items-center justify-between p-3 rounded-[24px] border ${editingMessage ? 'border-blue-500/30 bg-blue-500/5' : 'border-white/10 bg-white/5'} backdrop-blur-md`}>
               <div className="flex items-center gap-3 overflow-hidden">
@@ -214,10 +225,12 @@ const ChatInput: React.FC<Props> = ({
                 <X size={16} className="text-white/40" />
               </button>
             </div>
+            <p className="text-[8px] text-white/10 uppercase font-black tracking-widest text-center mt-1">Swipe right to dismiss</p>
           </motion.div>
         )}
       </AnimatePresence>
 
+      {/* Rest of the component remains exactly the same... */}
       <AnimatePresence>
         {mediaPreviews.length > 0 && (
           <motion.div initial={{ opacity: 0, y: 20, height: 0 }} animate={{ opacity: 1, y: 0, height: 'auto' }} exit={{ opacity: 0, y: 20, height: 0 }} className="mb-4 mx-1 overflow-x-auto no-scrollbar">
@@ -343,6 +356,7 @@ const ChatInput: React.FC<Props> = ({
   );
 };
 
+// ... ActionButton helper stays the same
 const ActionButton: React.FC<{ icon: React.ReactNode, color: string, onClick: () => void, label: string }> = ({ icon, color, onClick, label }) => {
   const colorMap: any = {
     blue: 'text-blue-400 hover:bg-blue-500/10 border-blue-500/10',
