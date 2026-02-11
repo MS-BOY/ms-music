@@ -1,4 +1,3 @@
-
 import React, { useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Message, Track } from '../types';
@@ -11,10 +10,12 @@ interface Props {
   onOpenMenu?: (e: React.MouseEvent | React.TouchEvent, message: Message) => void;
   onMediaClick?: (url: string, allMedia: {url: string, type: 'image' | 'video'}[]) => void;
   onSelectTrack?: (track: Track) => void;
+  onSwipeReply?: (message: Message) => void; // ✅ NEW
 }
 
-const MessageBubble: React.FC<Props> = ({ message, isMe, showAvatar, onOpenMenu, onMediaClick, onSelectTrack }) => {
+const MessageBubble: React.FC<Props> = ({ message, isMe, showAvatar, onOpenMenu, onMediaClick, onSelectTrack, onSwipeReply }) => {
   const longPressTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const SWIPE_THRESHOLD = 80; // px
 
   const isUnsent = message.isUnsent;
   const isSending = message.status === 'sending';
@@ -102,16 +103,11 @@ const MessageBubble: React.FC<Props> = ({ message, isMe, showAvatar, onOpenMenu,
                   {item.type === 'video' ? (
                     <div className="relative aspect-[4/5] sm:aspect-square flex items-center justify-center bg-black">
                       <video src={`${item.url}#t=0.1`} className="w-full h-full object-cover" muted playsInline />
-                      
-                      {/* Cinematic Overlays */}
                       <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-black/20" />
-                      
-                      {/* Video Badge */}
                       <div className="absolute top-3 left-3 px-2 py-1 glass-high rounded-lg border border-white/10 flex items-center gap-1.5 pointer-events-none">
                         <Film size={10} className="text-blue-400" />
                         <span className="text-[8px] font-black uppercase tracking-widest text-white/80 leading-none">Video</span>
                       </div>
-
                       {!isSending && (
                         <div className="absolute inset-0 flex items-center justify-center bg-black/10 group-hover:bg-transparent transition-colors">
                           <motion.div 
@@ -132,7 +128,6 @@ const MessageBubble: React.FC<Props> = ({ message, isMe, showAvatar, onOpenMenu,
                   )}
                 </div>
 
-                {/* Instant 3D Glowing Circular Progress */}
                 <AnimatePresence>
                   {isSending && (
                     <motion.div 
@@ -182,7 +177,27 @@ const MessageBubble: React.FC<Props> = ({ message, isMe, showAvatar, onOpenMenu,
   };
 
   return (
-    <motion.div initial={{ opacity: 0, scale: 0.98, y: 10 }} animate={{ opacity: 1, scale: 1, y: 0 }} transition={{ type: 'spring', damping: 28 }} onContextMenu={handleContextMenu} onTouchStart={handleTouchStart} onTouchEnd={handleTouchEnd} className={`flex flex-col ${isMe ? 'items-end' : 'items-start'} select-none`}>
+    <motion.div
+      initial={{ opacity: 0, scale: 0.98, y: 10 }}
+      animate={{ opacity: 1, scale: 1, y: 0 }}
+      transition={{ type: 'spring', damping: 28 }}
+      drag="x"
+      dragConstraints={{ left: isMe ? -120 : 0, right: isMe ? 0 : 120 }}
+      dragElastic={0.2}
+      onDragEnd={(e, info) => {
+        if (!onSwipeReply) return;
+        if (!isMe && info.offset.x > SWIPE_THRESHOLD) {
+          onSwipeReply(message);
+        }
+        if (isMe && info.offset.x < -SWIPE_THRESHOLD) {
+          onSwipeReply(message);
+        }
+      }}
+      onContextMenu={handleContextMenu}
+      onTouchStart={handleTouchStart}
+      onTouchEnd={handleTouchEnd}
+      className={`flex flex-col ${isMe ? 'items-end' : 'items-start'} select-none`}
+    >
       <div className={`flex gap-3 max-w-[92%] ${isMe ? 'flex-row-reverse' : 'flex-row'}`}>
         {!isMe && showAvatar && (
           <div className="w-9 h-9 rounded-2xl overflow-hidden shrink-0 border border-white/10 shadow-lg mt-auto mb-1">
