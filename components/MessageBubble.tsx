@@ -38,6 +38,51 @@ const MessageBubble: React.FC<Props> = ({ message, isMe, showAvatar, onOpenMenu,
     }));
   };
 
+  // Helper to render the small preview inside a reply block
+  const renderReplyPreviewContent = (reply: any) => {
+    if (!reply) return null;
+
+    switch (reply.type) {
+      case 'image':
+      case 'image-grid':
+        return (
+          <div className="flex items-center gap-2">
+            <div className="w-8 h-8 rounded-lg overflow-hidden border border-white/10 bg-black/40 shrink-0">
+              <img src={reply.content} alt="" className="w-full h-full object-cover opacity-60" />
+            </div>
+            <span className="text-white/30 italic text-[10px]">Photo</span>
+          </div>
+        );
+      case 'video':
+        return (
+          <div className="flex items-center gap-2">
+            <div className="w-8 h-8 rounded-lg overflow-hidden border border-white/10 bg-black/40 shrink-0 relative">
+              <video src={reply.content} className="w-full h-full object-cover opacity-60" />
+              <Film size={10} className="absolute inset-0 m-auto text-white/50" />
+            </div>
+            <span className="text-white/30 italic text-[10px]">Video</span>
+          </div>
+        );
+      case 'music':
+        try {
+          const track = JSON.parse(reply.content) as Track;
+          return (
+            <div className="flex items-center gap-2 bg-white/5 p-1 pr-2 rounded-xl border border-white/5 max-w-[180px]">
+              <img src={track.albumArt} className="w-8 h-8 rounded-lg object-cover" />
+              <div className="flex flex-col overflow-hidden">
+                <span className="text-[10px] font-bold text-white truncate">{track.title}</span>
+                <span className="text-[8px] text-white/40 uppercase tracking-tighter truncate">{track.artist}</span>
+              </div>
+            </div>
+          );
+        } catch {
+          return <span className="text-white/30 italic text-[10px]">Shared Music</span>;
+        }
+      default:
+        return <span className="text-white/30 line-clamp-1 italic text-[10px]">{reply.content}</span>;
+    }
+  };
+
   const renderContent = () => {
     if (isUnsent) return <p className="text-[13px] leading-relaxed text-white/40 italic font-medium">{message.content}</p>;
     const mediaItems = getMediaItems();
@@ -122,13 +167,10 @@ const MessageBubble: React.FC<Props> = ({ message, isMe, showAvatar, onOpenMenu,
         onContextMenu={(e) => { e.preventDefault(); onOpenMenu?.(e, message); }}
         onTouchStart={handleTouchStart} 
         onTouchEnd={handleTouchEnd} 
-        // FIXED: Added w-full and responsive horizontal padding
         className={`flex flex-col ${isMe ? 'items-end' : 'items-start'} select-none w-full px-3 py-0.5`}
       >
-        {/* FIXED: Adjusted max-width and gap for cleaner mobile alignment */}
         <div className={`flex gap-2.5 max-w-[88%] sm:max-w-[80%] ${isMe ? 'flex-row-reverse' : 'flex-row'}`}>
           
-          {/* Avatar Logic */}
           {!isMe && (
             <div className="w-9 shrink-0 flex items-end mb-1">
               {showAvatar ? (
@@ -136,7 +178,7 @@ const MessageBubble: React.FC<Props> = ({ message, isMe, showAvatar, onOpenMenu,
                   <img src={message.senderAvatar} alt={message.senderName} className="w-full h-full object-cover" />
                 </div>
               ) : (
-                <div className="w-9" /> /* Spacer to keep bubbles aligned when avatar is hidden */
+                <div className="w-9" />
               )}
             </div>
           )}
@@ -149,12 +191,13 @@ const MessageBubble: React.FC<Props> = ({ message, isMe, showAvatar, onOpenMenu,
             )}
             
             {message.replyTo && !isUnsent && (
-              <div className={`mb-1.5 px-3 py-2 bg-white/[0.03] rounded-2xl border-l-2 border-blue-500/50 flex flex-col text-[11px] ${isMe ? 'self-end mr-1' : 'ml-1'}`}>
-                 <div className="flex items-center gap-1.5 text-blue-400/80 font-black mb-0.5">
+              <div className={`mb-1.5 px-3 py-2 bg-white/[0.03] rounded-2xl border-l-2 border-blue-500/50 flex flex-col text-[11px] ${isMe ? 'self-end mr-1' : 'ml-1'} min-w-[120px]`}>
+                 <div className="flex items-center gap-1.5 text-blue-400/80 font-black mb-1">
                    <CornerUpLeft size={10} />
                    <span className="uppercase tracking-tight truncate">{message.replyTo.senderName}</span>
                  </div>
-                 <span className="text-white/30 line-clamp-1 italic text-[10px]">{message.replyTo.content}</span>
+                 {/* Visual Reply Preview for Images, Videos, and Music */}
+                 {renderReplyPreviewContent(message.replyTo)}
               </div>
             )}
             
