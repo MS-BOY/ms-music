@@ -1,5 +1,6 @@
-import React, { useRef, useState } from 'react'; // Added useState
-import { motion, AnimatePresence, useMotionValue, useTransform } from 'framer-motion'; // Added hooks
+
+import React, { useRef } from 'react';
+import { motion, AnimatePresence } from 'framer-motion';
 import { Message, Track } from '../types';
 import { CornerUpLeft, Play, Music, Film } from 'lucide-react';
 
@@ -10,16 +11,10 @@ interface Props {
   onOpenMenu?: (e: React.MouseEvent | React.TouchEvent, message: Message) => void;
   onMediaClick?: (url: string, allMedia: {url: string, type: 'image' | 'video'}[]) => void;
   onSelectTrack?: (track: Track) => void;
-  onReply?: (message: Message) => void; // New prop
 }
 
-const MessageBubble: React.FC<Props> = ({ message, isMe, showAvatar, onOpenMenu, onMediaClick, onSelectTrack, onReply }) => {
+const MessageBubble: React.FC<Props> = ({ message, isMe, showAvatar, onOpenMenu, onMediaClick, onSelectTrack }) => {
   const longPressTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-  
-  // Drag animation values
-  const dragX = useMotionValue(0);
-  const replyOpacity = useTransform(dragX, [0, 60], [0, 1]);
-  const replyScale = useTransform(dragX, [0, 60], [0.5, 1.2]);
 
   const isUnsent = message.isUnsent;
   const isSending = message.status === 'sending';
@@ -137,6 +132,7 @@ const MessageBubble: React.FC<Props> = ({ message, isMe, showAvatar, onOpenMenu,
                   )}
                 </div>
 
+                {/* Instant 3D Glowing Circular Progress */}
                 <AnimatePresence>
                   {isSending && (
                     <motion.div 
@@ -186,24 +182,8 @@ const MessageBubble: React.FC<Props> = ({ message, isMe, showAvatar, onOpenMenu,
   };
 
   return (
-    <motion.div 
-      initial={{ opacity: 0, scale: 0.98, y: 10 }} 
-      animate={{ opacity: 1, scale: 1, y: 0 }} 
-      transition={{ type: 'spring', damping: 28 }} 
-      onContextMenu={handleContextMenu} 
-      onTouchStart={handleTouchStart} 
-      onTouchEnd={handleTouchEnd} 
-      className={`flex flex-col ${isMe ? 'items-end' : 'items-start'} select-none relative w-full`}
-    >
-      {/* Swipe Reply Icon Overlay */}
-      <motion.div 
-        style={{ opacity: replyOpacity, scale: replyScale, x: -20 }}
-        className="absolute left-0 top-1/2 -translate-y-1/2 text-blue-500 z-0"
-      >
-        <CornerUpLeft size={24} />
-      </motion.div>
-
-      <div className={`flex gap-3 max-w-[92%] ${isMe ? 'flex-row-reverse' : 'flex-row'} relative z-10 w-full`}>
+    <motion.div initial={{ opacity: 0, scale: 0.98, y: 10 }} animate={{ opacity: 1, scale: 1, y: 0 }} transition={{ type: 'spring', damping: 28 }} onContextMenu={handleContextMenu} onTouchStart={handleTouchStart} onTouchEnd={handleTouchEnd} className={`flex flex-col ${isMe ? 'items-end' : 'items-start'} select-none`}>
+      <div className={`flex gap-3 max-w-[92%] ${isMe ? 'flex-row-reverse' : 'flex-row'}`}>
         {!isMe && showAvatar && (
           <div className="w-9 h-9 rounded-2xl overflow-hidden shrink-0 border border-white/10 shadow-lg mt-auto mb-1">
             <img src={message.senderAvatar} alt={message.senderName} className="w-full h-full object-cover" />
@@ -211,18 +191,7 @@ const MessageBubble: React.FC<Props> = ({ message, isMe, showAvatar, onOpenMenu,
         )}
         {!isMe && !showAvatar && <div className="w-9" />}
         
-        <motion.div 
-          className="relative group flex flex-col"
-          drag="x"
-          dragConstraints={{ left: 0, right: 100 }}
-          dragElastic={0.6}
-          style={{ x: dragX }}
-          onDragEnd={(_, info) => {
-            if (info.offset.x > 60 && onReply) {
-              onReply(message);
-            }
-          }}
-        >
+        <div className="relative group flex flex-col">
           {showAvatar && !isMe && <p className="text-[10px] font-black text-white/20 uppercase tracking-[0.2em] mb-1.5 ml-1.5">{message.senderName}</p>}
           {message.replyTo && !isUnsent && (
             <div className={`mb-1.5 px-3 py-2 bg-white/[0.03] rounded-2xl border-l-2 border-blue-500/50 flex flex-col text-[11px] ${isMe ? 'self-end mr-1' : 'ml-1'}`}>
@@ -248,7 +217,7 @@ const MessageBubble: React.FC<Props> = ({ message, isMe, showAvatar, onOpenMenu,
               {message.reactions.map((r, i) => <span key={i} className="drop-shadow-sm">{r}</span>)}
             </motion.div>
           )}
-        </motion.div>
+        </div>
       </div>
     </motion.div>
   );
