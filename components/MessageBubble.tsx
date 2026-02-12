@@ -122,40 +122,65 @@ const MessageBubble: React.FC<Props> = ({ message, isMe, showAvatar, onOpenMenu,
         onContextMenu={(e) => { e.preventDefault(); onOpenMenu?.(e, message); }}
         onTouchStart={handleTouchStart} 
         onTouchEnd={handleTouchEnd} 
-        className={`flex flex-col ${isMe ? 'items-end' : 'items-start'} select-none px-4 py-1 w-full`}
+        // FIXED: Added w-full and responsive horizontal padding
+        className={`flex flex-col ${isMe ? 'items-end' : 'items-start'} select-none w-full px-3 py-0.5`}
       >
-        <div className={`flex gap-3 max-w-[92%] ${isMe ? 'flex-row-reverse' : 'flex-row'}`}>
-          {!isMe && showAvatar && (
-            <div className="w-9 h-9 rounded-2xl overflow-hidden shrink-0 border border-white/10 shadow-lg mt-auto mb-1">
-              <img src={message.senderAvatar} alt={message.senderName} className="w-full h-full object-cover" />
+        {/* FIXED: Adjusted max-width and gap for cleaner mobile alignment */}
+        <div className={`flex gap-2.5 max-w-[88%] sm:max-w-[80%] ${isMe ? 'flex-row-reverse' : 'flex-row'}`}>
+          
+          {/* Avatar Logic */}
+          {!isMe && (
+            <div className="w-9 shrink-0 flex items-end mb-1">
+              {showAvatar ? (
+                <div className="w-9 h-9 rounded-2xl overflow-hidden border border-white/10 shadow-lg">
+                  <img src={message.senderAvatar} alt={message.senderName} className="w-full h-full object-cover" />
+                </div>
+              ) : (
+                <div className="w-9" /> /* Spacer to keep bubbles aligned when avatar is hidden */
+              )}
             </div>
           )}
-          {!isMe && !showAvatar && <div className="w-9" />}
           
-          <div className="relative group flex flex-col">
-            {showAvatar && !isMe && <p className="text-[10px] font-black text-white/20 uppercase tracking-[0.2em] mb-1.5 ml-1.5">{message.senderName}</p>}
+          <div className="relative group flex flex-col min-w-0">
+            {showAvatar && !isMe && (
+              <p className="text-[10px] font-black text-white/20 uppercase tracking-[0.2em] mb-1 ml-1">
+                {message.senderName}
+              </p>
+            )}
             
             {message.replyTo && !isUnsent && (
               <div className={`mb-1.5 px-3 py-2 bg-white/[0.03] rounded-2xl border-l-2 border-blue-500/50 flex flex-col text-[11px] ${isMe ? 'self-end mr-1' : 'ml-1'}`}>
                  <div className="flex items-center gap-1.5 text-blue-400/80 font-black mb-0.5">
                    <CornerUpLeft size={10} />
-                   <span className="uppercase tracking-tight">{message.replyTo.senderName}</span>
+                   <span className="uppercase tracking-tight truncate">{message.replyTo.senderName}</span>
                  </div>
                  <span className="text-white/30 line-clamp-1 italic text-[10px]">{message.replyTo.content}</span>
               </div>
             )}
             
-            <motion.div className={`relative overflow-hidden transition-all duration-300 ${isMediaOnly ? 'bg-transparent p-0 shadow-none' : 'glass px-4.5 py-3.5 shadow-xl'} ${!isMediaOnly && !isUnsent ? (isMe ? 'bg-blue-600/10 rounded-[28px] rounded-tr-[4px] border-blue-500/10' : 'bg-white/[0.05] rounded-[28px] rounded-tl-[4px] border-white/5') : ''} ${isUnsent ? 'bg-white/[0.02] border border-white/[0.05] p-3 rounded-[24px] italic text-white/40' : ''}`}>
+            <motion.div 
+              className={`relative overflow-hidden transition-all duration-300 
+                ${isMediaOnly ? 'bg-transparent p-0 shadow-none' : 'glass px-4 py-3 shadow-xl'} 
+                ${!isMediaOnly && !isUnsent ? (isMe ? 'bg-blue-600/10 rounded-[24px] rounded-tr-[4px] border-blue-500/10' : 'bg-white/[0.05] rounded-[24px] rounded-tl-[4px] border-white/5') : ''} 
+                ${isUnsent ? 'bg-white/[0.02] border border-white/[0.05] p-3 rounded-[20px] italic text-white/40' : ''}`}
+            >
               {renderContent()}
+              
               <div className={`flex items-center gap-2 ${isMediaOnly ? 'mt-1.5 px-2' : 'mt-2'} ${isMe ? 'justify-end' : 'justify-start'}`}>
                 {message.isEdited && !isUnsent && <span className="text-[9px] text-white/20 font-black uppercase tracking-widest">Edited</span>}
-                <span className="text-[9px] text-white/25 font-bold tabular-nums">{new Date(message.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
+                <span className="text-[9px] text-white/25 font-bold tabular-nums">
+                  {new Date(message.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                </span>
                 {isSending && <div className="w-1.5 h-1.5 rounded-full bg-blue-500/50 animate-pulse" />}
               </div>
             </motion.div>
 
             {message.reactions && message.reactions.length > 0 && !isUnsent && (
-              <motion.div initial={{ scale: 0 }} animate={{ scale: 1 }} className={`absolute -bottom-2 ${isMe ? 'right-2' : 'left-2'} glass-high px-2 h-6 rounded-full flex items-center justify-center text-[12px] shadow-2xl border border-white/10 gap-0.5 z-10`}>
+              <motion.div 
+                initial={{ scale: 0 }} 
+                animate={{ scale: 1 }} 
+                className={`absolute -bottom-2 ${isMe ? 'right-2' : 'left-2'} glass-high px-2 h-6 rounded-full flex items-center justify-center text-[12px] shadow-2xl border border-white/10 gap-0.5 z-10`}
+              >
                 {message.reactions.map((r, i) => <span key={i} className="drop-shadow-sm">{r}</span>)}
               </motion.div>
             )}
