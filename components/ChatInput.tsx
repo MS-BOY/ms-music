@@ -1,4 +1,3 @@
-
 import React, { useState, useRef, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Plus, Smile, Mic, Send, Camera, Image, Music as MusicIcon, X, CornerUpLeft, Edit2, Film, Search } from 'lucide-react';
@@ -159,6 +158,52 @@ const ChatInput: React.FC<Props> = ({
     t.artist.toLowerCase().includes(musicSearch.toLowerCase())
   );
 
+  // Helper to render reply content preview
+  const renderReplyPreview = () => {
+    if (editingMessage) return <span className="text-xs text-white/60 truncate">{editingMessage.content}</span>;
+    if (!replyingTo) return null;
+
+    switch (replyingTo.type) {
+      case 'image':
+      case 'image-grid':
+        return (
+          <div className="flex items-center gap-2">
+            <div className="w-8 h-8 rounded-lg overflow-hidden border border-white/10 shrink-0">
+              <img src={replyingTo.content} alt="reply-img" className="w-full h-full object-cover" />
+            </div>
+            <span className="text-xs text-white/40 italic">Photo</span>
+          </div>
+        );
+      case 'video':
+        return (
+          <div className="flex items-center gap-2">
+            <div className="w-8 h-8 rounded-lg overflow-hidden border border-white/10 bg-black/40 shrink-0 relative">
+              <video src={replyingTo.content} className="w-full h-full object-cover" />
+              <Film size={10} className="absolute inset-0 m-auto text-white/50" />
+            </div>
+            <span className="text-xs text-white/40 italic">Video</span>
+          </div>
+        );
+      case 'music':
+        try {
+          const track = JSON.parse(replyingTo.content) as Track;
+          return (
+            <div className="flex items-center gap-2 bg-white/5 p-1 pr-3 rounded-xl border border-white/5">
+              <img src={track.albumArt} className="w-8 h-8 rounded-lg object-cover" />
+              <div className="flex flex-col min-w-0">
+                <span className="text-[10px] font-bold text-white truncate w-32">{track.title}</span>
+                <span className="text-[8px] text-white/40 uppercase tracking-tighter">{track.artist}</span>
+              </div>
+            </div>
+          );
+        } catch {
+          return <span className="text-xs text-white/60 italic">Shared Music</span>;
+        }
+      default:
+        return <span className="text-xs text-white/60 truncate italic">"{replyingTo.content}"</span>;
+    }
+  };
+
   return (
     <div className="px-4 py-4 bg-transparent relative z-20 w-full max-w-4xl">
       <input type="file" ref={cameraInputRef} accept="image/*" capture="environment" className="hidden" onChange={(e) => handleFileSelect(e, 'camera')} />
@@ -200,14 +245,14 @@ const ChatInput: React.FC<Props> = ({
             className="mb-2 mx-1 overflow-hidden"
           >
             <div className={`glass flex items-center justify-between p-3 rounded-[24px] border ${editingMessage ? 'border-blue-500/30 bg-blue-500/5' : 'border-white/10 bg-white/5'} backdrop-blur-md`}>
-              <div className="flex items-center gap-3 overflow-hidden">
+              <div className="flex items-center gap-3 overflow-hidden flex-1">
                 <div className={`w-1 h-8 ${editingMessage ? 'bg-blue-500' : 'bg-white/40'} rounded-full shrink-0`} />
-                <div className="flex flex-col min-w-0">
+                <div className="flex flex-col min-w-0 flex-1">
                   <span className={`text-[10px] font-black text-blue-400 flex items-center gap-1 uppercase tracking-tight`}>
                     {editingMessage ? <Edit2 size={10} /> : <CornerUpLeft size={10} />}
                     {editingMessage ? 'Editing Message' : `Replying to ${replyingTo?.senderName}`}
                   </span>
-                  <span className="text-xs text-white/60 truncate max-w-[200px]">{editingMessage?.content || replyingTo?.content}</span>
+                  {renderReplyPreview()}
                 </div>
               </div>
               <button onClick={editingMessage ? onCancelEdit : onCancelReply} className="p-2 hover:bg-white/10 rounded-full transition-colors">
