@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { MoreVertical, ChevronLeft, Copy, Edit2, Trash2, X, Reply } from 'lucide-react';
+import { MoreVertical, ChevronLeft, Copy, Edit2, Trash2, X, Reply as ReplyIcon } from 'lucide-react';
 import { doc, onSnapshot, collection, query, orderBy, addDoc, updateDoc, setDoc, getDoc, deleteDoc } from 'firebase/firestore';
 import { db, auth } from '../firebase';
 import { MS_GROUP } from '../constants';
@@ -53,7 +53,6 @@ const ChatScreen: React.FC<Props> = ({ onBack, onSettings, hasPlayer, tracks, on
     return () => unsubscribe();
   }, []);
 
-  // Listen for typing users
   useEffect(() => {
     const typingRef = collection(db, 'groups', GROUP_ID, 'typing');
     const unsubscribe = onSnapshot(typingRef, (snapshot) => {
@@ -223,7 +222,16 @@ const ChatScreen: React.FC<Props> = ({ onBack, onSettings, hasPlayer, tracks, on
       timestamp: Date.now(),
       type: 'music',
       reactions: [],
+      ...(replyingTo ? {
+        replyTo: {
+          id: replyingTo.id,
+          senderName: replyingTo.senderName,
+          content: replyingTo.content,
+          type: replyingTo.type
+        }
+      } : {})
     };
+    setReplyingTo(null);
     await addDoc(collection(db, 'groups', GROUP_ID, 'messages'), newMessage);
   };
 
@@ -290,7 +298,6 @@ const ChatScreen: React.FC<Props> = ({ onBack, onSettings, hasPlayer, tracks, on
             onOpenMenu={handleOpenMenu}
             onMediaClick={(url, all) => { setViewerItems(all); setViewerIndex(all.findIndex(i => i.url === url)); setViewerOpen(true); }}
             onSelectTrack={onSelectTrack}
-            // CONNECTING SWIPE FEATURE HERE
             onReply={(m) => setReplyingTo(m)}
           />
         ))}
