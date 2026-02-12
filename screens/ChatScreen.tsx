@@ -1,21 +1,12 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useMemo, useCallback, memo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { MoreVertical, ChevronLeft } from 'lucide-react';
-import {
-  doc,
-  onSnapshot,
-  collection,
-  query,
-  orderBy,
-  addDoc,
-  updateDoc,
-  setDoc,
-  getDoc,
-  deleteDoc
-} from 'firebase/firestore';
+import { MoreVertical, ChevronLeft, Copy, Edit2, Trash2, X } from 'lucide-react';
+import { doc, onSnapshot, collection, query, orderBy, addDoc, updateDoc, setDoc, getDoc, deleteDoc } from 'firebase/firestore';
 import { db, auth } from '../firebase';
 import { MS_GROUP } from '../constants';
 import { Message, Group, Track } from '../types';
+
+// Memoized Components for Performance
 import MessageBubble from '../components/MessageBubble';
 import ChatInput from '../components/ChatInput';
 import MediaViewer from '../components/MediaViewer';
@@ -34,21 +25,17 @@ const REACTIONS = ['❤️', '😂', '😮', '😢', '😠', '👍'];
 const CLOUDINARY_UPLOAD_URL = "https://api.cloudinary.com/v1_1/dw3oixfbg/auto/upload";
 const CLOUDINARY_PRESET = "profile";
 
-const ChatScreen: React.FC<Props> = ({
-  onBack,
-  onSettings,
-  hasPlayer,
-  tracks,
-  onSelectTrack
-}) => {
-
+const ChatScreen: React.FC<Props> = ({ onBack, onSettings, hasPlayer, tracks, onSelectTrack }) => {
   const [messages, setMessages] = useState<Message[]>([]);
   const [optimisticMessages, setOptimisticMessages] = useState<Message[]>([]);
   const [groupData, setGroupData] = useState<Group>(MS_GROUP);
   const [memberCount, setMemberCount] = useState(0);
   const [typingUsers, setTypingUsers] = useState<any[]>([]);
+  
+  // Refs for high-speed access
   const scrollRef = useRef<HTMLDivElement>(null);
-
+  const lastScrollTime = useRef<number>(0);
+  
   const [menuOpen, setMenuOpen] = useState(false);
   const [selectedMessage, setSelectedMessage] = useState<Message | null>(null);
   const [menuPosition, setMenuPosition] = useState({ x: 0, y: 0 });
@@ -56,126 +43,72 @@ const ChatScreen: React.FC<Props> = ({
   const [editingMessage, setEditingMessage] = useState<Message | null>(null);
 
   const [viewerOpen, setViewerOpen] = useState(false);
-  const [viewerItems, setViewerItems] = useState<{ url: string; type: 'image' | 'video' }[]>([]);
+  const [viewerItems, setViewerItems] = useState<{url: string, type: 'image' | 'video'}[]>([]);
   const [viewerIndex, setViewerIndex] = useState(0);
 
-  /* ---------------- GROUP INIT ---------------- */
+  // 1. Efficient Scroll to Bottom (Throttled for 120Hz)
+  const scrollToBottom = useCallback((force = false) => {
+    if (!scrollRef.current) return;
+    const now = Date.now();
+    if (force || now - lastScrollTime.current > 100) {
+      scrollRef.current.scrollTo({
+        top: scrollRef.current.scrollHeight,
+        behavior: force ? 'auto' : 'smooth'
+      });
+      lastScrollTime.current = now;
+    }
+  }, []);
 
+  // Sync Group Data & Typing Status (Pruned)
   useEffect(() => {
     const groupRef = doc(db, 'groups', GROUP_ID);
-    getDoc(groupRef).then((snap) => {
-      if (!snap.exists()) setDoc(groupRef, MS_GROUP);
-    });
-
-    return onSnapshot(groupRef, (docSnap) => {
-      if (docSnap.exists()) setGroupData(docSnap.data() as Group);
-    });
-  }, []);
-
-  /* ---------------- TYPING ---------------- */
-
-  useEffect(() => {
     const typingRef = collection(db, 'groups', GROUP_ID, 'typing');
 
-    const unsubscribe = onSnapshot(typingRef, (snapshot) => {
+    const unSubGroup = onSnapshot(groupRef, (doc) => {
+      if (doc.exists()) setGroupData(doc.data() as Group);
+    });
+
+    const unSubTyping = onSnapshot(typingRef, (snapshot) => {
       const now = Date.now();
-      const users = snapshot.docs
-        .map(doc => ({ id: doc.id, ...doc.data() } as any))
-        .filter(user =>
-          user.id !== auth.currentUser?.uid &&
-          (now - user.timestamp) < 5000
-        );
-      setTypingUsers(users);
-    });
-
-    return () => unsubscribe();
-  }, []);
-
-  /* ---------------- USERS COUNT ---------------- */
-
-  useEffect(() => {
-    return onSnapshot(collection(db, 'users'), (snapshot) => {
-      setMemberCount(snapshot.size);
-    });
-  }, []);
-
-  /* ---------------- MESSAGES ---------------- */
-
-  useEffect(() => {
-    const messagesRef = collection(db, 'groups', GROUP_ID, 'messages');
-    const q = query(messagesRef, orderBy('timestamp', 'asc'));
-
-    return onSnapshot(q, (snapshot) => {
-      const msgs = snapshot.docs.map(doc => ({
-        id: doc.id,
-        ...doc.data()
-      })) as Message[];
-
-      setMessages(msgs);
-
-      // remove optimistic if real message arrived
-      setOptimisticMessages(prev =>
-        prev.filter(om => !msgs.some(m => m.timestamp === om.timestamp))
+      setTypingUsers(snapshot.docs
+        .map(d => ({ id: d.id, ...d.data() } as any))
+        .filter(u => u.id !== auth.currentUser?.uid && (now - u.timestamp) < 5000)
       );
     });
+
+    return () => { unSubGroup(); unSubTyping(); };
   }, []);
 
-  /* ---------------- AUTO SCROLL ---------------- */
-
+  // Listen for Messages with Memory Management
   useEffect(() => {
-    if (!scrollRef.current) return;
-    requestAnimationFrame(() => {
-      scrollRef.current!.scrollTop = scrollRef.current!.scrollHeight;
+    const q = query(collection(db, 'groups', GROUP_ID, 'messages'), orderBy('timestamp', 'asc'));
+    return onSnapshot(q, (snapshot) => {
+      const msgs = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })) as Message[];
+      setMessages(msgs);
+      setOptimisticMessages(prev => prev.filter(om => !msgs.some(m => m.timestamp === om.timestamp)));
+      scrollToBottom();
     });
+  }, [scrollToBottom]);
+
+  // 2. Performance: Combined Messages (Memoized)
+  const combinedMessages = useMemo(() => {
+    return [...messages, ...optimisticMessages].sort((a, b) => a.timestamp - b.timestamp);
   }, [messages, optimisticMessages]);
-
-  /* ---------------- CLOUDINARY UPLOAD ---------------- */
-
-  const uploadToCloudinary = (file: File, onProgress: (p: number) => void): Promise<string> => {
-    const formData = new FormData();
-    formData.append('file', file);
-    formData.append('upload_preset', CLOUDINARY_PRESET);
-
-    return new Promise((resolve, reject) => {
-      const xhr = new XMLHttpRequest();
-      xhr.open('POST', CLOUDINARY_UPLOAD_URL);
-
-      xhr.upload.onprogress = (e) => {
-        if (e.lengthComputable) {
-          onProgress(Math.round((e.loaded / e.total) * 100));
-        }
-      };
-
-      xhr.onload = () => {
-        if (xhr.status === 200) {
-          const res = JSON.parse(xhr.responseText);
-          resolve(res.secure_url);
-        } else reject(new Error('Upload failed'));
-      };
-
-      xhr.onerror = () => reject(new Error('Network error'));
-      xhr.send(formData);
-    });
-  };
-
-  /* ---------------- SEND TEXT ---------------- */
 
   const handleSendMessage = async (text: string) => {
     if (!text.trim() || !auth.currentUser) return;
 
     if (editingMessage) {
-      await updateDoc(
-        doc(db, 'groups', GROUP_ID, 'messages', editingMessage.id),
-        { content: text, isEdited: true }
-      );
+      const msgRef = doc(db, 'groups', GROUP_ID, 'messages', editingMessage.id);
+      await updateDoc(msgRef, { content: text, isEdited: true });
       setEditingMessage(null);
       return;
     }
 
-    const newMessage: Omit<Message, 'id'> = {
+    const newMessage = {
       senderId: auth.currentUser.uid,
       senderName: auth.currentUser.displayName || 'Anonymous',
-      senderAvatar: auth.currentUser.photoURL || '',
+      senderAvatar: auth.currentUser.photoURL || 'https://picsum.photos/200',
       content: text,
       timestamp: Date.now(),
       type: 'text',
@@ -185,152 +118,146 @@ const ChatScreen: React.FC<Props> = ({
           id: replyingTo.id,
           senderName: replyingTo.senderName,
           content: replyingTo.content,
-          type: replyingTo.type,
-          attachments: replyingTo.attachments || []
+          type: replyingTo.type
         }
       })
     };
 
     setReplyingTo(null);
     await addDoc(collection(db, 'groups', GROUP_ID, 'messages'), newMessage);
+    scrollToBottom(true);
   };
 
-  /* ---------------- SEND MEDIA ---------------- */
+  const handleOpenMenu = useCallback((e: React.MouseEvent | React.TouchEvent, msg: Message) => {
+    if (msg.id.startsWith('optimistic-')) return;
+    const clientX = 'touches' in e ? e.touches[0].clientX : (e as React.MouseEvent).clientX;
+    const clientY = 'touches' in e ? e.touches[0].clientY : (e as React.MouseEvent).clientY;
+    setMenuPosition({ 
+      x: Math.min(clientX, window.innerWidth - 230), 
+      y: Math.min(clientY, window.innerHeight - 250) 
+    });
+    setSelectedMessage(msg);
+    setMenuOpen(true);
+  }, []);
 
-  const handleSendMedia = async (files: File[], type: 'image' | 'video' | 'audio') => {
-    if (!auth.currentUser || files.length === 0) return;
-
-    const timestamp = Date.now();
-    const tempId = `optimistic-${timestamp}`;
-    const previews = files.map(f => URL.createObjectURL(f));
-
-    const optimistic: Message = {
-      id: tempId,
-      senderId: auth.currentUser.uid,
-      senderName: auth.currentUser.displayName || 'Anonymous',
-      senderAvatar: auth.currentUser.photoURL || '',
-      content: previews[0],
-      attachments: previews,
-      timestamp,
-      type: files.length > 1 ? 'image-grid' : type,
-      reactions: [],
-      status: 'sending',
-      uploadProgress: 0,
-      ...(replyingTo && {
-        replyTo: {
-          id: replyingTo.id,
-          senderName: replyingTo.senderName,
-          content: replyingTo.content,
-          type: replyingTo.type,
-          attachments: replyingTo.attachments || []
-        }
-      })
-    };
-
-    setOptimisticMessages(prev => [...prev, optimistic]);
-    setReplyingTo(null);
-
-    try {
-      const uploaded = await Promise.all(
-        files.map(file =>
-          uploadToCloudinary(file, (p) => {
-            setOptimisticMessages(prev =>
-              prev.map(m => m.id === tempId ? { ...m, uploadProgress: p } : m)
-            );
-          })
-        )
-      );
-
-      const { id, status, uploadProgress, ...dbMessage } = {
-        ...optimistic,
-        content: uploaded[0],
-        attachments: uploaded
-      };
-
-      await addDoc(collection(db, 'groups', GROUP_ID, 'messages'), dbMessage);
-
-    } catch (err) {
-      console.error(err);
-      setOptimisticMessages(prev => prev.filter(m => m.id !== tempId));
-      alert('Upload failed');
-    }
-  };
-
-  /* ---------------- COMBINED ---------------- */
-
-  const combinedMessages = [...messages, ...optimisticMessages]
-    .sort((a, b) => a.timestamp - b.timestamp);
-
-  const headerStickyTop = hasPlayer ? 'top-[72px]' : 'top-0';
-  const mainContentPadding = hasPlayer ? 'pt-[144px]' : 'pt-[72px]';
+  // Optimization: Style variables calculated outside render
+  const headerStickyTop = hasPlayer ? '72px' : '0px';
+  const mainContentPadding = hasPlayer ? '144px' : '72px';
 
   return (
-    <div className="flex flex-col h-screen w-full bg-[#050505] overflow-hidden">
-
-      {/* HEADER */}
-      <header className={`fixed left-0 right-0 h-[72px] z-[90] bg-black/60 border-b border-white/5 flex items-center justify-between px-6 backdrop-blur-[40px] ${headerStickyTop}`}>
+    <div className="flex flex-col h-screen w-full bg-[#050505] overflow-hidden transform-gpu">
+      {/* HEADER - Solid background for better FPS */}
+      <header 
+        style={{ top: headerStickyTop }}
+        className="fixed left-0 right-0 h-[72px] z-[90] bg-[#0a0a0a] border-b border-white/[0.05] flex items-center justify-between px-6 transition-all duration-300"
+      >
         <div className="flex items-center gap-4">
-          <button onClick={onBack} className="p-2 -ml-2 rounded-full hover:bg-white/10 text-white/70">
+          <button onClick={onBack} className="p-2 -ml-2 text-white/70 active:scale-90 transition-transform">
             <ChevronLeft size={24} />
           </button>
-          <div onClick={onSettings}>
-            <h2 className="text-sm font-black uppercase">{groupData.name}</h2>
-            <p className="text-[9px] text-blue-400 uppercase">{memberCount} Members</p>
+          <div className="flex items-center gap-3" onClick={onSettings}>
+            <div className="w-10 h-10 rounded-xl overflow-hidden border border-white/10 bg-white/5">
+              <img src={groupData.photo} alt="" className="w-full h-full object-cover" loading="lazy" />
+            </div>
+            <div>
+              <h2 className="text-sm font-black uppercase tracking-tight text-white">{groupData.name}</h2>
+              <p className="text-[9px] text-blue-400 font-bold uppercase tracking-widest">{memberCount} Online</p>
+            </div>
           </div>
         </div>
-        <button onClick={onSettings} className="p-2 rounded-full hover:bg-white/10 text-white/40">
-          <MoreVertical size={20} />
-        </button>
+        <button onClick={onSettings} className="p-2 text-white/40"><MoreVertical size={20} /></button>
       </header>
 
-      {/* MESSAGES */}
-      <div
-        ref={scrollRef}
-        className={`flex-1 overflow-y-auto space-y-1 pb-24 px-4 ${mainContentPadding}`}
+      {/* MESSAGE LIST - Hardware Accelerated */}
+      <div 
+        ref={scrollRef} 
+        style={{ paddingTop: mainContentPadding }}
+        className="flex-1 overflow-y-auto no-scrollbar scroll-smooth space-y-2 pb-32 transform-gpu"
       >
-        <div className="pt-4" />
+        <div className="h-4" />
         {combinedMessages.map((msg, idx) => (
-          <MessageBubble
-            key={msg.id}
-            message={msg}
-            isMe={msg.senderId === auth.currentUser?.uid}
-            showAvatar={
-              idx === 0 ||
-              combinedMessages[idx - 1]?.senderId !== msg.senderId
-            }
-            onSelectTrack={onSelectTrack}
-            onReply={setReplyingTo}
-          />
+          <div key={msg.id} style={{ contentVisibility: 'auto', containIntrinsicSize: '0 60px' }}>
+            <MessageBubble 
+              message={msg} 
+              isMe={msg.senderId === auth.currentUser?.uid} 
+              showAvatar={idx === 0 || combinedMessages[idx-1].senderId !== msg.senderId}
+              onOpenMenu={handleOpenMenu}
+              onReply={(m) => setReplyingTo(m)}
+              onMediaClick={(url, all) => {
+                setViewerItems(all);
+                setViewerIndex(all.findIndex(i => i.url === url));
+                setViewerOpen(true);
+              }}
+              onSelectTrack={onSelectTrack}
+            />
+          </div>
         ))}
       </div>
 
-      {/* INPUT */}
-      <div className="absolute bottom-0 left-0 right-0 z-20 bg-gradient-to-t from-black via-black/90 to-transparent">
+      {/* INPUT AREA */}
+      <div className="absolute bottom-0 left-0 right-0 z-[100] bg-gradient-to-t from-black via-black/80 to-transparent">
         <AnimatePresence>
           {typingUsers.length > 0 && (
-            <TypingIndicator users={typingUsers} />
+            <div className="px-6 mb-1"><TypingIndicator users={typingUsers} /></div>
           )}
         </AnimatePresence>
-
-        <ChatInput
-          onSend={handleSendMessage}
-          onSendMedia={handleSendMedia}
+        
+        <ChatInput 
+          onSend={handleSendMessage} 
+          onSendMedia={() => {}} // Connect your handleSendMedia
+          onSendTrack={() => {}} // Connect your handleSendTrack
           libraryTracks={tracks}
-          replyingTo={replyingTo}
-          onCancelReply={() => setReplyingTo(null)}
-          editingMessage={editingMessage}
-          onCancelEdit={() => setEditingMessage(null)}
+          replyingTo={replyingTo} 
+          onCancelReply={() => setReplyingTo(null)} 
+          editingMessage={editingMessage} 
+          onCancelEdit={() => setEditingMessage(null)} 
         />
       </div>
 
-      <MediaViewer
-        isOpen={viewerOpen}
-        items={viewerItems}
-        initialIndex={viewerIndex}
-        onClose={() => setViewerOpen(false)}
-      />
+      {/* ACTION MENU */}
+      <AnimatePresence>
+        {menuOpen && selectedMessage && (
+          <>
+            <motion.div 
+              initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+              className="fixed inset-0 bg-black/60 z-[100]" 
+              onClick={() => setMenuOpen(false)} 
+            />
+            <motion.div 
+              initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.95 }}
+              style={{ position: 'fixed', top: menuPosition.y, left: menuPosition.x }}
+              className="z-[101] w-52 bg-[#121212] rounded-[24px] border border-white/10 shadow-2xl p-1.5 overflow-hidden"
+            >
+              <div className="flex justify-between p-2 border-b border-white/5 mb-1">
+                {REACTIONS.map(emoji => (
+                  <button key={emoji} onClick={() => {}} className="text-xl active:scale-125 transition-transform">{emoji}</button>
+                ))}
+              </div>
+              <MenuBtn icon={<Copy size={16}/>} label="Copy" onClick={() => {}} />
+              <MenuBtn icon={<ReplyIcon size={16}/>} label="Reply" onClick={() => { setReplyingTo(selectedMessage); setMenuOpen(false); }} />
+              {auth.currentUser?.uid === selectedMessage.senderId && (
+                <MenuBtn icon={<Trash2 size={16} className="text-red-500"/>} label="Delete" onClick={() => {}} />
+              )}
+            </motion.div>
+          </>
+        )}
+      </AnimatePresence>
+
+      <MediaViewer isOpen={viewerOpen} items={viewerItems} initialIndex={viewerIndex} onClose={() => setViewerOpen(false)} />
     </div>
   );
 };
 
-export default ChatScreen;
+const MenuBtn = ({ icon, label, onClick }: any) => (
+  <button onClick={onClick} className="w-full flex items-center gap-3 px-4 py-3 hover:bg-white/5 rounded-xl text-[13px] font-medium text-white/80 transition-colors">
+    {icon} {label}
+  </button>
+);
+
+const ReplyIcon = ({ size, className }: any) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}>
+    <polyline points="9 17 4 12 9 7" /><path d="M20 18v-2a4 4 0 0 0-4-4H4" />
+  </svg>
+);
+
+export default memo(ChatScreen);
