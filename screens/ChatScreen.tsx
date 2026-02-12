@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { MoreVertical, ChevronLeft, Copy, Edit2, Trash2, X, Reply } from 'lucide-react';
@@ -65,7 +64,6 @@ const ChatScreen: React.FC<Props> = ({ onBack, onSettings, hasPlayer, tracks, on
       setTypingUsers(users);
     });
     
-    // Periodically prune stale local state if the server doesn't update
     const interval = setInterval(() => {
       const now = Date.now();
       setTypingUsers(prev => prev.filter(user => (now - user.timestamp) < 5000));
@@ -292,12 +290,13 @@ const ChatScreen: React.FC<Props> = ({ onBack, onSettings, hasPlayer, tracks, on
             onOpenMenu={handleOpenMenu}
             onMediaClick={(url, all) => { setViewerItems(all); setViewerIndex(all.findIndex(i => i.url === url)); setViewerOpen(true); }}
             onSelectTrack={onSelectTrack}
+            // CONNECTING SWIPE FEATURE HERE
+            onReply={(m) => setReplyingTo(m)}
           />
         ))}
       </div>
 
       <div className="absolute bottom-0 left-0 right-0 z-20 bg-gradient-to-t from-black via-black/90 to-transparent flex flex-col items-center">
-        {/* Floating Typing Indicator */}
         <AnimatePresence>
           {typingUsers.length > 0 && (
             <div className="px-6 w-full max-w-4xl flex justify-start">
