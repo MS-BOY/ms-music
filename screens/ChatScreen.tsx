@@ -1,6 +1,8 @@
+
 import React, { useState, useEffect, useRef, useMemo, useCallback, memo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { ChevronLeft, MoreVertical } from 'lucide-react';
+import { Chevro
+nLeft, MoreVertical } from 'lucide-react';
 import { doc, onSnapshot, collection, query, orderBy, addDoc, updateDoc, setDoc, getDoc, deleteDoc } from 'firebase/firestore';
 import { db, auth } from '../firebase';
 import { MS_GROUP } from '../constants';
@@ -232,5 +234,3 @@ const ChatScreen: React.FC<Props> = ({ onBack, onSettings, hasPlayer, tracks, on
     </div>
   );
 };
-
-export default ChatScreen;
