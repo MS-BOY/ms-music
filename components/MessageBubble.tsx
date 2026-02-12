@@ -1,7 +1,8 @@
 import React, { useRef } from 'react';
-import { motion, AnimatePresence, useMotionValue, useTransform } from 'framer-motion';
+import { motion, AnimatePresence } from 'framer-motion';
 import { Message, Track } from '../types';
 import { CornerUpLeft, Play, Music, Film } from 'lucide-react';
+import SwipeableMessage from './SwipeableMessage'; // Import the swipe wrapper
 
 interface Props {
   message: Message;
@@ -13,14 +14,16 @@ interface Props {
   onReply?: (message: Message) => void; // Added onReply prop
 }
 
-const MessageBubble: React.FC<Props> = ({ message, isMe, showAvatar, onOpenMenu, onMediaClick, onSelectTrack, onReply }) => {
+const MessageBubble: React.FC<Props> = ({ 
+  message, 
+  isMe, 
+  showAvatar, 
+  onOpenMenu, 
+  onMediaClick, 
+  onSelectTrack,
+  onReply 
+}) => {
   const longPressTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-  
-  // Swipe to reply logic
-  const dragX = useMotionValue(0);
-  // Icon appears as we swipe: opacity goes 0 -> 1, scale 0.5 -> 1
-  const replyOpacity = useTransform(dragX, [0, 60], [0, 1]);
-  const replyScale = useTransform(dragX, [0, 60], [0.5, 1]);
 
   const isUnsent = message.isUnsent;
   const isSending = message.status === 'sending';
@@ -188,36 +191,17 @@ const MessageBubble: React.FC<Props> = ({ message, isMe, showAvatar, onOpenMenu,
   };
 
   return (
-    <div className="relative w-full flex flex-col overflow-hidden">
-      {/* Swipe Icon Indicator (revealed behind the bubble) */}
-      {!isUnsent && onReply && (
-        <motion.div 
-          style={{ opacity: replyOpacity, scale: replyScale, left: 20 }}
-          className="absolute top-1/2 -translate-y-1/2 text-blue-400 z-0 pointer-events-none"
-        >
-          <CornerUpLeft size={24} />
-        </motion.div>
-      )}
-
-      <motion.div 
-        initial={{ opacity: 0, scale: 0.98, y: 10 }} 
-        animate={{ opacity: 1, scale: 1, y: 0 }} 
-        transition={{ type: 'spring', damping: 28 }} 
-        onContextMenu={handleContextMenu} 
-        onTouchStart={handleTouchStart} 
-        onTouchEnd={handleTouchEnd} 
-        // Drag properties for Swipe-to-Reply
-        drag={!isUnsent && onReply ? "x" : false}
-        dragConstraints={{ left: 0, right: 100 }}
-        dragElastic={0.2}
-        style={{ x: dragX }}
-        onDragEnd={(_, info) => {
-          if (info.offset.x > 70) {
-            onReply?.(message);
-          }
-        }}
-        className={`flex flex-col ${isMe ? 'items-end' : 'items-start'} select-none relative z-10`}
-      >
+    <motion.div 
+      initial={{ opacity: 0, scale: 0.98, y: 10 }} 
+      animate={{ opacity: 1, scale: 1, y: 0 }} 
+      transition={{ type: 'spring', damping: 28 }} 
+      onContextMenu={handleContextMenu} 
+      onTouchStart={handleTouchStart} 
+      onTouchEnd={handleTouchEnd} 
+      className={`flex flex-col ${isMe ? 'items-end' : 'items-start'} select-none w-full`}
+    >
+      {/* WRAPPER ADDED FOR SWIPE TO REPLY */}
+      <SwipeableMessage onReply={() => onReply?.(message)} isMe={isMe}>
         <div className={`flex gap-3 max-w-[92%] ${isMe ? 'flex-row-reverse' : 'flex-row'}`}>
           {!isMe && showAvatar && (
             <div className="w-9 h-9 rounded-2xl overflow-hidden shrink-0 border border-white/10 shadow-lg mt-auto mb-1">
@@ -254,8 +238,8 @@ const MessageBubble: React.FC<Props> = ({ message, isMe, showAvatar, onOpenMenu,
             )}
           </div>
         </div>
-      </motion.div>
-    </div>
+      </SwipeableMessage>
+    </motion.div>
   );
 };
 
