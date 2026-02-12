@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useMemo, memo } from 'react';
 import { motion } from 'framer-motion';
 import { Upload, Heart, Play, MoreVertical } from 'lucide-react';
 import { Track } from '../types';
@@ -11,59 +11,115 @@ interface Props {
   hasPlayer?: boolean;
 }
 
+// 1. Memoize the Individual Item to prevent massive re-renders when one track changes
+const LibraryItem = memo(({ track, index, onSelect, onToggleFav }: { 
+  track: Track, 
+  index: number, 
+  onSelect: () => void, 
+  onToggleFav: () => void 
+}) => {
+  return (
+    <motion.div
+      // Use simple opacity for low-end devices to save GPU cycles
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      transition={{ duration: 0.3, delay: Math.min(index * 0.03, 0.3) }} 
+      className="group relative flex items-center gap-4 p-3 rounded-[24px] bg-white/[0.03] active:bg-white/[0.1] transition-colors cursor-pointer border border-white/[0.05] overflow-hidden"
+      onClick={onSelect}
+      // GPU Acceleration hint
+      style={{ willChange: 'transform, opacity' }}
+    >
+      <div className="w-14 h-14 rounded-xl overflow-hidden relative shadow-lg bg-white/5 shrink-0 border border-white/5">
+        <img 
+          src={track.albumArt} 
+          alt="" 
+          loading="lazy" // Native lazy loading for 2GB RAM efficiency
+          className="w-full h-full object-cover transform-gpu" 
+        />
+        <div className="absolute inset-0 bg-black/40 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
+          <Play size={20} fill="white" className="text-white" />
+        </div>
+      </div>
+
+      <div className="flex-1 min-w-0">
+        <h4 className="font-bold text-sm text-white truncate font-outfit uppercase tracking-tight">
+          {track.title}
+        </h4>
+        <p className="text-[10px] text-white/40 truncate mt-0.5 font-bold uppercase tracking-widest">
+          {track.artist}
+        </p>
+      </div>
+
+      <div className="flex items-center gap-1">
+        <button 
+          onClick={(e) => { e.stopPropagation(); onToggleFav(); }} 
+          className={`w-9 h-9 flex items-center justify-center rounded-full transition-all ${
+            track.isFavorite ? 'text-red-500 bg-red-500/10' : 'text-white/20'
+          }`}
+        >
+          <Heart size={18} fill={track.isFavorite ? 'currentColor' : 'none'} />
+        </button>
+        <button 
+          onClick={(e) => e.stopPropagation()}
+          className="w-9 h-9 flex items-center justify-center rounded-full text-white/10"
+        >
+          <MoreVertical size={18} />
+        </button>
+      </div>
+    </motion.div>
+  );
+});
+
 const LibraryScreen: React.FC<Props> = ({ tracks, onSelectTrack, onUploadRequest, onToggleFavorite, hasPlayer }) => {
   
-  const sortedTracks = [...tracks].sort((a, b) => {
-    return parseInt(b.id) - parseInt(a.id);
-  });
+  // 2. Memoize sorting logic so it doesn't run on every single render
+  const sortedTracks = useMemo(() => {
+    return [...tracks].sort((a, b) => parseInt(b.id) - parseInt(a.id));
+  }, [tracks]);
 
-  // Zero margin docking logic
-  const headerStickyPos = hasPlayer ? 'top-[72px]' : 'top-0';
-  const contentPadding = hasPlayer ? 'pt-[144px]' : 'pt-[72px]';
+  // 3. Static style calculations
+  const headerStickyPos = hasPlayer ? '72px' : '0px';
+  const contentPaddingTop = hasPlayer ? '144px' : '72px';
 
   return (
-    <div className={`flex flex-col h-full w-full bg-[#050505] pb-32 overflow-y-auto no-scrollbar transition-all duration-500`}>
-      {/* Cinematic Background Elements */}
-      <div className="fixed top-0 inset-x-0 h-96 bg-gradient-to-b from-blue-900/10 to-transparent pointer-events-none" />
+    <div className="flex flex-col h-full w-full bg-[#050505] overflow-y-auto no-scrollbar selection:bg-blue-500/30">
+      {/* Optimized Background: Radial gradient is cheaper than Blur filters */}
+      <div className="fixed top-0 inset-x-0 h-64 bg-[radial-gradient(circle_at_top,rgba(30,58,138,0.15)_0%,transparent_100%)] pointer-events-none" />
 
-      {/* Header - Aligned to Anchor Card at top-[72px] */}
-      <header className={`fixed left-0 right-0 z-[90] h-[72px] px-6 glass bg-[#050505]/90 backdrop-blur-[50px] border-b border-white/10 flex items-center justify-between transition-all duration-500 ${headerStickyPos}`}>
-        <h1 className="text-3xl font-black font-outfit tracking-tight uppercase">Library</h1>
+      {/* Optimized Header: Removed Backdrop-blur (performance killer on 2GB RAM) */}
+      <header 
+        style={{ top: headerStickyPos }}
+        className="fixed left-0 right-0 z-[90] h-[72px] px-6 bg-[#050505] border-b border-white/[0.08] flex items-center justify-between"
+      >
+        <h1 className="text-2xl font-black font-outfit tracking-tight uppercase text-white">Library</h1>
         <motion.button
-          whileTap={{ scale: 0.9 }}
+          whileTap={{ scale: 0.95 }}
           onClick={onUploadRequest}
-          className="w-11 h-11 glass rounded-2xl flex items-center justify-center border border-white/20 text-blue-400 shadow-2xl hover:bg-blue-500/10 transition-colors"
+          className="w-10 h-10 bg-white/[0.05] rounded-xl flex items-center justify-center border border-white/10 text-blue-400 active:bg-blue-500/20 transition-colors"
         >
-          <Upload size={22} />
+          <Upload size={20} />
         </motion.button>
       </header>
 
       {/* Main Content Area */}
-      <div className={`px-6 mt-8 relative z-10 transition-all duration-500 ${contentPadding}`}>
-        
-        <div className="mb-8">
-          <div className="relative mb-8 inline-block">
-             <div className="absolute -inset-4 bg-blue-500/20 rounded-2xl blur-2xl opacity-40" />
-             <div className="relative border border-blue-500/40 rounded-2xl px-5 py-2.5 bg-blue-500/10 backdrop-blur-md">
-                <h2 className="text-xl font-black font-outfit text-white flex items-center gap-3 uppercase tracking-tighter">
-                  <Heart size={20} className="text-blue-400" />
-                  My Collection
-                </h2>
-             </div>
+      <main 
+        style={{ paddingTop: contentPaddingTop }}
+        className="px-6 pb-32 relative z-10"
+      >
+        <div className="mb-6 mt-4">
+          <div className="inline-flex items-center gap-2 px-4 py-2 bg-blue-500/10 border border-blue-500/20 rounded-xl mb-6">
+            <Heart size={16} className="text-blue-400" />
+            <h2 className="text-sm font-black font-outfit text-white uppercase tracking-tighter">
+              My Collection
+            </h2>
           </div>
 
-          <div className="space-y-5">
+          {/* 4. Optimized List Rendering */}
+          <div className="grid grid-cols-1 gap-3" style={{ contentVisibility: 'auto' }}>
             {sortedTracks.length === 0 ? (
-              <div className="glass p-16 rounded-[40px] text-center text-white/40 border border-white/10 flex flex-col items-center shadow-2xl">
-                <Upload size={64} className="mb-6 opacity-10" />
-                <p className="text-lg font-black uppercase tracking-[0.3em] mb-3">Void Detected</p>
-                <p className="text-sm text-white/20 max-w-[240px] leading-relaxed mb-8">Your digital soundscape is currently empty. Initialize a new upload.</p>
-                <button 
-                  onClick={onUploadRequest} 
-                  className="px-10 py-4 bg-white text-black rounded-[20px] text-xs font-black uppercase tracking-widest hover:scale-105 transition-transform shadow-[0_15px_30px_rgba(255,255,255,0.2)]"
-                >
-                  Start Upload
-                </button>
+              <div className="p-12 rounded-[32px] text-center text-white/20 border border-dashed border-white/10 flex flex-col items-center">
+                <Upload size={48} className="mb-4 opacity-10" />
+                <p className="text-xs font-black uppercase tracking-widest">Library Empty</p>
               </div>
             ) : (
               sortedTracks.map((track, idx) => (
@@ -71,53 +127,16 @@ const LibraryScreen: React.FC<Props> = ({ tracks, onSelectTrack, onUploadRequest
                   key={track.id} 
                   track={track} 
                   index={idx}
-                  onSelect={() => onSelectTrack(track)}
-                  onToggleFav={() => onToggleFavorite(track.id)}
+                  onSelect={onSelectTrack}
+                  onToggleFav={onToggleFavorite}
                 />
               ))
             )}
           </div>
         </div>
-      </div>
+      </main>
     </div>
   );
 };
 
-const LibraryItem: React.FC<{ track: Track, index: number, onSelect: () => void, onToggleFav: () => void }> = ({ track, index, onSelect, onToggleFav }) => (
-  <motion.div
-    initial={{ x: -20, opacity: 0 }}
-    animate={{ x: 0, opacity: 1 }}
-    transition={{ delay: index * 0.05, duration: 0.6 }}
-    className="group relative flex items-center gap-5 p-4 rounded-[28px] hover:bg-white/[0.04] transition-all cursor-pointer border border-transparent hover:border-white/5 shadow-lg overflow-hidden"
-    onClick={onSelect}
-  >
-    <div className="w-16 h-16 rounded-2xl overflow-hidden relative shadow-2xl bg-white/5 shrink-0 border border-white/5">
-      <img src={track.albumArt} alt={track.title} className="w-full h-full object-cover group-hover:scale-125 transition-transform duration-1000" />
-      <div className="absolute inset-0 bg-black/50 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity backdrop-blur-[2px]">
-        <Play size={24} fill="white" className="text-white" />
-      </div>
-    </div>
-
-    <div className="flex-1 min-w-0">
-      <h4 className="font-black text-base text-white truncate group-hover:text-blue-400 transition-colors font-outfit uppercase tracking-tight">{track.title}</h4>
-      <p className="text-xs text-white/30 truncate mt-1 font-bold uppercase tracking-widest">{track.artist}</p>
-    </div>
-
-    <div className="flex items-center gap-2">
-      <button 
-        onClick={(e) => { e.stopPropagation(); onToggleFav(); }} 
-        className={`w-10 h-10 flex items-center justify-center rounded-full transition-all ${track.isFavorite ? 'text-red-500 bg-red-500/10' : 'text-white/20 hover:text-white hover:bg-white/10'}`}
-      >
-        <Heart size={20} fill={track.isFavorite ? 'currentColor' : 'none'} />
-      </button>
-      <button 
-        onClick={(e) => e.stopPropagation()}
-        className="w-10 h-10 flex items-center justify-center rounded-full text-white/20 hover:text-white hover:bg-white/10 transition-colors"
-      >
-        <MoreVertical size={20} />
-      </button>
-    </div>
-  </motion.div>
-);
-
-export default LibraryScreen;
+export default memo(LibraryScreen);
