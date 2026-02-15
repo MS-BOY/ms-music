@@ -1,7 +1,6 @@
-import React, { memo } from 'react';
-import { motion, AnimatePresence } from 'framer-motion';
-import { Search, Bell, Play, ListMusic, TrendingUp, Sparkles } from 'lucide-react';
-import MusicCard from '../components/MusicCard';
+import React, { memo, useMemo } from 'react';
+import { motion } from 'framer-motion';
+import { Search, Bell, Play, TrendingUp, Sparkles, LayoutGrid, Clock, ChevronRight } from 'lucide-react';
 import { Track, User } from '../types';
 
 interface Props {
@@ -9,152 +8,111 @@ interface Props {
   user: User | null;
   onSelectTrack: (track: Track) => void;
   onNavigateProfile: () => void;
-  onSeeAll: () => void;
-  hasPlayer?: boolean;
 }
 
-// Snappy spring config for fast feel
-const springTransition = { type: "spring", stiffness: 400, damping: 30 };
+const SPRING_CONFIG = { type: "spring", stiffness: 500, damping: 35 };
 
-const HomeScreen: React.FC<Props> = ({ tracks, user, onSelectTrack, onNavigateProfile, onSeeAll, hasPlayer }) => {
-  const latestTrack = tracks.length > 0 ? tracks[0] : null;
-
-  // Layout calculations
-  const headerStickyPos = hasPlayer ? 'top-[72px]' : 'top-0';
-  const contentPadding = hasPlayer ? 'pt-[144px]' : 'pt-[72px]';
+const HomeScreen: React.FC<Props> = ({ tracks, user, onSelectTrack, onNavigateProfile }) => {
+  // Memoize data to prevent re-renders on low-end CPUs
+  const featuredTrack = useMemo(() => tracks[0], [tracks]);
+  const trendingTracks = useMemo(() => tracks.slice(1, 6), [tracks]);
+  const recentTracks = useMemo(() => tracks.slice(6, 12), [tracks]);
 
   return (
-    <div className="relative h-full w-full overflow-hidden bg-[#050505] text-white">
+    <div className="h-full w-full bg-[#050505] text-white selection:bg-blue-500/30 overflow-y-auto no-scrollbar scroll-smooth">
       
-      {/* 1. FIXED HEADER - Optimized with GPU layer */}
-      <header 
-        className={`fixed left-0 right-0 z-[100] h-[72px] px-6 flex items-center justify-between bg-black/40 backdrop-blur-xl border-b border-white/5 transition-all duration-300 ${headerStickyPos}`}
-        style={{ transform: 'translateZ(0)', backfaceVisibility: 'hidden' }}
-      >
-        <div className="flex items-center gap-3 select-none">
-          <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-blue-600 to-indigo-600 flex items-center justify-center shadow-lg shadow-blue-500/20">
-            <span className="font-outfit font-black text-lg">M</span>
-          </div>
-          <h1 className="text-lg font-black font-outfit tracking-tighter uppercase">MS MUSIC</h1>
+      {/* 1. ULTRA-LIGHT HEADER */}
+      <header className="sticky top-0 z-[100] h-16 px-5 flex items-center justify-between bg-[#050505]/80 backdrop-blur-md border-b border-white/[0.03] will-change-transform">
+        <div className="flex items-center gap-2">
+          <div className="w-8 h-8 rounded-lg bg-blue-600 flex items-center justify-center font-black text-sm">M</div>
+          <span className="text-sm font-black tracking-tighter uppercase italic">VIBE</span>
         </div>
         
-        <div className="flex items-center gap-2.5">
-          <button className="p-2.5 bg-white/5 hover:bg-white/10 rounded-xl transition-colors active:scale-90">
-            <Search size={18} className="text-white/70" />
-          </button>
-          <button className="p-2.5 bg-white/5 hover:bg-white/10 rounded-xl transition-colors relative active:scale-90">
-            <Bell size={18} className="text-white/70" />
-            <span className="absolute top-2.5 right-2.5 w-1.5 h-1.5 bg-blue-500 rounded-full ring-2 ring-black" />
-          </button>
-          <div 
-            onClick={onNavigateProfile}
-            className="w-9 h-9 rounded-xl border border-white/10 overflow-hidden cursor-pointer ml-1 active:scale-90 transition-all bg-white/5"
-          >
-            <img src={user?.avatar || "https://picsum.photos/200"} alt="User" className="w-full h-full object-cover" />
+        <div className="flex items-center gap-4">
+          <Search size={20} className="text-white/40" />
+          <div onClick={onNavigateProfile} className="w-8 h-8 rounded-full border border-white/10 overflow-hidden active:scale-90 transition-transform">
+            <img src={user?.avatar || "https://picsum.photos/100"} alt="" className="w-full h-full object-cover" loading="lazy" />
           </div>
         </div>
       </header>
 
-      {/* 2. MAIN SCROLL AREA - Ultra Smooth Vertical Scroll */}
-      <main 
-        className={`h-full overflow-y-auto overflow-x-hidden no-scrollbar ${contentPadding} scroll-smooth`}
-        style={{ 
-          touchAction: 'pan-y', // Enables fast vertical swipe
-          WebkitOverflowScrolling: 'touch', // iOS Momentum Scroll
-          overscrollBehaviorY: 'contain' 
-        }}
-      >
-        
-        {/* HERO SECTION - Touch Optimized */}
-        <section className="px-6 pt-4">
-          <AnimatePresence mode="wait">
-            {latestTrack ? (
-              <motion.div 
-                initial={{ opacity: 0, y: 20 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={springTransition}
-                onClick={() => onSelectTrack(latestTrack)}
-                className="relative aspect-[16/9] sm:aspect-[21/7] w-full max-w-5xl mx-auto rounded-[32px] overflow-hidden group cursor-pointer bg-neutral-900 shadow-2xl will-change-transform"
-              >
-                {/* Image Optimization: Pointer events none and Draggable false ensures swipe always works */}
-                <img 
-                  src={latestTrack.albumArt} 
-                  alt="" 
-                  draggable="false"
-                  className="absolute inset-0 w-full h-full object-cover opacity-60 transition-transform duration-1000 group-hover:scale-105 pointer-events-none select-none"
-                />
-                
-                <div className="absolute inset-0 bg-gradient-to-t from-black via-black/30 to-transparent pointer-events-none" />
-                
-                <div className="absolute inset-0 p-8 flex flex-col justify-end pointer-events-none">
-                  <div className="flex items-center gap-2 mb-3">
-                    <Sparkles size={14} className="text-blue-400" />
-                    <span className="text-[10px] font-bold tracking-[0.2em] uppercase text-white/60">Featured Drop</span>
-                  </div>
-                  <h2 className="text-3xl sm:text-5xl font-black mb-1 tracking-tighter leading-none">{latestTrack.title}</h2>
-                  <p className="text-white/40 font-bold text-lg mb-6">{latestTrack.artist}</p>
-                  
-                  <button className="pointer-events-auto flex items-center gap-3 bg-white text-black px-7 py-3 rounded-full font-black text-xs uppercase tracking-widest hover:bg-blue-500 hover:text-white transition-all active:scale-95 w-fit shadow-xl">
-                    <Play size={16} fill="currentColor" /> Play Now
-                  </button>
+      <main className="pb-32 pt-4">
+        {/* 2. HERO SECTION - Single layer with CSS gradient (Low RAM usage) */}
+        <section className="px-5 mb-8" style={{ contain: 'content' }}>
+          {featuredTrack && (
+            <div 
+              onClick={() => onSelectTrack(featuredTrack)}
+              className="relative aspect-[16/10] w-full rounded-[24px] overflow-hidden bg-zinc-900 shadow-2xl active:scale-[0.98] transition-transform"
+            >
+              <img 
+                src={featuredTrack.albumArt} 
+                className="absolute inset-0 w-full h-full object-cover opacity-50" 
+                alt="" 
+                loading="eager" 
+              />
+              <div className="absolute inset-0 bg-gradient-to-t from-black via-black/20 to-transparent" />
+              <div className="absolute bottom-0 left-0 p-6">
+                <div className="flex items-center gap-2 mb-2 text-blue-400">
+                  <Sparkles size={12} fill="currentColor" />
+                  <span className="text-[10px] font-black uppercase tracking-widest">Hot Pick</span>
                 </div>
-              </motion.div>
-            ) : (
-              <div className="aspect-[21/7] bg-white/5 rounded-[32px] flex items-center justify-center border border-white/5">
-                <ListMusic className="text-white/10" size={40} />
+                <h2 className="text-2xl font-black tracking-tight leading-none mb-1">{featuredTrack.title}</h2>
+                <p className="text-white/40 text-sm font-medium mb-4">{featuredTrack.artist}</p>
+                <button className="h-10 px-6 bg-white text-black rounded-full font-black text-[10px] uppercase tracking-tighter flex items-center gap-2">
+                  <Play size={14} fill="currentColor" /> Listen Now
+                </button>
               </div>
-            )}
-          </AnimatePresence>
+            </div>
+          )}
         </section>
 
-        {/* SEARCH AREA - Non-blocking UI */}
-        <div className="px-6 mt-10 max-w-5xl mx-auto">
-          <div className="relative group">
-            <Search className="absolute left-5 top-1/2 -translate-y-1/2 text-white/20 group-focus-within:text-blue-500 transition-colors pointer-events-none" size={20} />
-            <input 
-              type="text" 
-              placeholder="Search the MS Metaverse..."
-              className="w-full h-14 bg-white/[0.03] rounded-2xl pl-14 pr-6 border border-white/5 outline-none focus:bg-white/[0.08] focus:border-blue-500/30 transition-all text-sm font-medium placeholder:text-white/20"
-            />
-          </div>
-        </div>
-
-        {/* TRENDING SECTION - Horizontal Scroll Optimization */}
-        <section className="mt-12">
-          <div className="px-6 mb-6 flex items-center justify-between max-w-5xl mx-auto">
-            <div className="flex items-center gap-2 select-none">
-              <TrendingUp size={20} className="text-blue-500" />
-              <h3 className="text-xl font-black uppercase tracking-tighter">Trending Now</h3>
-            </div>
-            <button onClick={onSeeAll} className="text-[10px] font-black uppercase tracking-widest text-white/40 hover:text-white transition-colors py-2 px-4 bg-white/5 rounded-lg active:scale-95">View All</button>
+        {/* 3. TRENDING - Native CSS Scroll Snap (Zero JS overhead) */}
+        <section className="mb-10" style={{ contain: 'content' }}>
+          <div className="px-5 mb-4 flex items-center justify-between">
+            <h3 className="text-xs font-black uppercase tracking-[0.2em] text-white/30 flex items-center gap-2">
+              <TrendingUp size={14} /> Trending
+            </h3>
+            <ChevronRight size={16} className="text-white/20" />
           </div>
           
-          <div 
-            className="flex gap-5 overflow-x-auto px-6 pb-6 no-scrollbar snap-x touch-pan-x"
-            style={{ WebkitOverflowScrolling: 'touch' }}
-          >
-            {tracks.length > 0 ? (
-              tracks.map((track, idx) => (
-                <div key={track.id} className="snap-start shrink-0 will-change-transform">
-                  <MusicCard 
-                    track={track} 
-                    index={idx} 
-                    onClick={() => onSelectTrack(track)}
-                  />
+          <div className="flex gap-4 overflow-x-auto px-5 pb-2 no-scrollbar snap-x touch-pan-x">
+            {trendingTracks.map((track) => (
+              <div 
+                key={track.id} 
+                onClick={() => onSelectTrack(track)}
+                className="snap-start shrink-0 w-32 active:scale-95 transition-transform"
+              >
+                <div className="aspect-square rounded-2xl bg-zinc-900 border border-white/5 overflow-hidden mb-2">
+                  <img src={track.albumArt} className="w-full h-full object-cover" alt="" loading="lazy" />
                 </div>
-              ))
-            ) : (
-              <div className="w-full text-center py-10 text-white/10 uppercase font-black text-xs tracking-[0.2em]">Syncing...</div>
-            )}
+                <p className="text-[11px] font-bold truncate">{track.title}</p>
+                <p className="text-[10px] text-white/30 truncate">{track.artist}</p>
+              </div>
+            ))}
           </div>
         </section>
 
-        {/* DISCOVER GRID - High Response Tap */}
-        <section className="mt-6 px-6 mb-32 max-w-5xl mx-auto">
-          <h3 className="text-xl font-black uppercase tracking-tighter mb-6 select-none">Discover</h3>
-          <div className="grid grid-cols-2 gap-4">
-            <DiscoverCard title="TOP CHARTS" color="from-blue-600/30" icon={<Play size={20} />} onClick={onSeeAll} />
-            <DiscoverCard title="NEW DROPS" color="from-purple-600/30" icon={<Sparkles size={20} />} onClick={onSeeAll} />
+        {/* 4. DISCOVER GRID - Static layout for performance */}
+        <section className="px-5 mb-10">
+          <div className="grid grid-cols-2 gap-3">
+            <CategoryCard title="Charts" color="bg-blue-600/10" icon={<TrendingUp size={18} className="text-blue-500" />} />
+            <CategoryCard title="Moods" color="bg-purple-600/10" icon={<LayoutGrid size={18} className="text-purple-500" />} />
+          </div>
+        </section>
+
+        {/* 5. RECENTLY PLAYED - Simple vertical list (Memory Efficient) */}
+        <section className="px-5" style={{ contain: 'content' }}>
+          <h3 className="text-xs font-black uppercase tracking-[0.2em] text-white/30 mb-4 flex items-center gap-2">
+            <Clock size={14} /> Recents
+          </h3>
+          <div className="space-y-1">
+            {recentTracks.map((track) => (
+              <TrackListItem 
+                key={track.id} 
+                track={track} 
+                onClick={() => onSelectTrack(track)} 
+              />
+            ))}
           </div>
         </section>
       </main>
@@ -162,21 +120,31 @@ const HomeScreen: React.FC<Props> = ({ tracks, user, onSelectTrack, onNavigatePr
   );
 };
 
-// Memoized Discover Card for zero-lag interaction
-const DiscoverCard = memo(({ title, color, icon, onClick }: { title: string, color: string, icon: any, onClick: () => void }) => (
-  <motion.div
-    whileTap={{ scale: 0.96 }}
-    onClick={onClick}
-    className={`relative h-32 rounded-3xl p-5 overflow-hidden cursor-pointer border border-white/5 bg-white/[0.02] group will-change-transform shadow-lg`}
-  >
-    <div className={`absolute inset-0 bg-gradient-to-br ${color} to-transparent opacity-40 group-hover:opacity-70 transition-opacity pointer-events-none`} />
-    <div className="relative z-10 h-full flex flex-col justify-between pointer-events-none">
-      <div className="w-10 h-10 rounded-xl bg-white/5 backdrop-blur-md flex items-center justify-center border border-white/10 shadow-inner">
-        {icon}
-      </div>
-      <h4 className="font-black text-sm tracking-tighter uppercase">{title}</h4>
-    </div>
-  </motion.div>
+/* --- SUB-COMPONENTS (Memoized to prevent CPU spikes) --- */
+
+const CategoryCard = memo(({ title, color, icon }: any) => (
+  <div className={`p-4 rounded-2xl ${color} border border-white/[0.03] flex flex-col gap-3 active:scale-95 transition-transform`}>
+    <div className="w-10 h-10 rounded-xl bg-black/20 flex items-center justify-center">{icon}</div>
+    <span className="text-xs font-black uppercase tracking-wider">{title}</span>
+  </div>
 ));
 
-export default HomeScreen;
+const TrackListItem = memo(({ track, onClick }: any) => (
+  <button 
+    onClick={onClick}
+    className="w-full flex items-center gap-4 p-2 hover:bg-white/[0.02] active:bg-white/[0.05] rounded-xl transition-colors group"
+  >
+    <div className="w-12 h-12 rounded-lg bg-zinc-900 overflow-hidden shrink-0 border border-white/5">
+      <img src={track.albumArt} className="w-full h-full object-cover" alt="" loading="lazy" />
+    </div>
+    <div className="flex-1 text-left min-w-0">
+      <p className="text-sm font-bold text-white/90 truncate group-active:text-blue-400 transition-colors">{track.title}</p>
+      <p className="text-[11px] text-white/30 truncate font-medium uppercase tracking-tighter">{track.artist}</p>
+    </div>
+    <div className="w-8 h-8 flex items-center justify-center text-white/20">
+      <Play size={16} fill="currentColor" className="opacity-0 group-active:opacity-100 group-hover:opacity-100 transition-opacity" />
+    </div>
+  </button>
+));
+
+export default memo(HomeScreen);
