@@ -13,126 +13,148 @@ interface Props {
   hasPlayer?: boolean;
 }
 
-// Optimization: Snappy spring transitions for "fast" feel
-const springConfig = { type: "spring", stiffness: 300, damping: 30 };
+// Snappy spring config for fast feel
+const springTransition = { type: "spring", stiffness: 400, damping: 30 };
 
 const HomeScreen: React.FC<Props> = ({ tracks, user, onSelectTrack, onNavigateProfile, onSeeAll, hasPlayer }) => {
   const latestTrack = tracks.length > 0 ? tracks[0] : null;
 
-  // Use simple pixel offsets for padding to avoid layout thrashing
+  // Layout calculations
   const headerStickyPos = hasPlayer ? 'top-[72px]' : 'top-0';
   const contentPadding = hasPlayer ? 'pt-[144px]' : 'pt-[72px]';
 
   return (
     <div className="relative h-full w-full overflow-hidden bg-[#050505] text-white">
-      {/* FIXED HEADER - Optimized Blur */}
+      
+      {/* 1. FIXED HEADER - Optimized with GPU layer */}
       <header 
-        className={`fixed left-0 right-0 z-[100] h-[72px] px-6 flex items-center justify-between bg-black/60 backdrop-blur-lg border-b border-white/5 transition-all duration-300 ${headerStickyPos}`}
-        style={{ transform: 'translateZ(0)' }} // Force GPU layer
+        className={`fixed left-0 right-0 z-[100] h-[72px] px-6 flex items-center justify-between bg-black/40 backdrop-blur-xl border-b border-white/5 transition-all duration-300 ${headerStickyPos}`}
+        style={{ transform: 'translateZ(0)', backfaceVisibility: 'hidden' }}
       >
-        <div className="flex items-center gap-3">
-          <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-blue-600 to-indigo-600 flex items-center justify-center">
+        <div className="flex items-center gap-3 select-none">
+          <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-blue-600 to-indigo-600 flex items-center justify-center shadow-lg shadow-blue-500/20">
             <span className="font-outfit font-black text-lg">M</span>
           </div>
           <h1 className="text-lg font-black font-outfit tracking-tighter uppercase">MS MUSIC</h1>
         </div>
         
-        <div className="flex items-center gap-3">
-          <button className="p-2 hover:bg-white/10 rounded-full transition-colors">
-            <Search size={20} className="text-white/70" />
+        <div className="flex items-center gap-2.5">
+          <button className="p-2.5 bg-white/5 hover:bg-white/10 rounded-xl transition-colors active:scale-90">
+            <Search size={18} className="text-white/70" />
           </button>
-          <button className="p-2 hover:bg-white/10 rounded-full transition-colors relative">
-            <Bell size={20} className="text-white/70" />
-            <span className="absolute top-2 right-2 w-2 h-2 bg-blue-500 rounded-full border-2 border-black" />
+          <button className="p-2.5 bg-white/5 hover:bg-white/10 rounded-xl transition-colors relative active:scale-90">
+            <Bell size={18} className="text-white/70" />
+            <span className="absolute top-2.5 right-2.5 w-1.5 h-1.5 bg-blue-500 rounded-full ring-2 ring-black" />
           </button>
           <div 
             onClick={onNavigateProfile}
-            className="w-9 h-9 rounded-full border border-white/20 overflow-hidden cursor-pointer ml-1 active:scale-90 transition-transform"
+            className="w-9 h-9 rounded-xl border border-white/10 overflow-hidden cursor-pointer ml-1 active:scale-90 transition-all bg-white/5"
           >
             <img src={user?.avatar || "https://picsum.photos/200"} alt="User" className="w-full h-full object-cover" />
           </div>
         </div>
       </header>
 
-      {/* SCROLLABLE AREA - Clean scrolling, no transitions on container */}
-      <main className={`h-full overflow-y-auto overflow-x-hidden no-scrollbar ${contentPadding} scroll-smooth transform-gpu`}>
+      {/* 2. MAIN SCROLL AREA - Ultra Smooth Vertical Scroll */}
+      <main 
+        className={`h-full overflow-y-auto overflow-x-hidden no-scrollbar ${contentPadding} scroll-smooth`}
+        style={{ 
+          touchAction: 'pan-y', // Enables fast vertical swipe
+          WebkitOverflowScrolling: 'touch', // iOS Momentum Scroll
+          overscrollBehaviorY: 'contain' 
+        }}
+      >
         
-        {/* HERO - Optimized for no-stutter */}
+        {/* HERO SECTION - Touch Optimized */}
         <section className="px-6 pt-4">
           <AnimatePresence mode="wait">
-            {latestTrack && (
+            {latestTrack ? (
               <motion.div 
-                initial={{ opacity: 0, y: 10 }}
+                initial={{ opacity: 0, y: 20 }}
                 animate={{ opacity: 1, y: 0 }}
-                transition={springConfig}
+                transition={springTransition}
                 onClick={() => onSelectTrack(latestTrack)}
-                className="relative aspect-[16/8] sm:aspect-[21/7] w-full max-w-5xl mx-auto rounded-[32px] overflow-hidden group cursor-pointer bg-neutral-900 shadow-2xl"
+                className="relative aspect-[16/9] sm:aspect-[21/7] w-full max-w-5xl mx-auto rounded-[32px] overflow-hidden group cursor-pointer bg-neutral-900 shadow-2xl will-change-transform"
               >
+                {/* Image Optimization: Pointer events none and Draggable false ensures swipe always works */}
                 <img 
                   src={latestTrack.albumArt} 
                   alt="" 
-                  className="absolute inset-0 w-full h-full object-cover opacity-50 transition-transform duration-700 group-hover:scale-105"
+                  draggable="false"
+                  className="absolute inset-0 w-full h-full object-cover opacity-60 transition-transform duration-1000 group-hover:scale-105 pointer-events-none select-none"
                 />
-                <div className="absolute inset-0 bg-gradient-to-t from-black via-black/20 to-transparent" />
                 
-                <div className="absolute inset-0 p-8 flex flex-col justify-end">
+                <div className="absolute inset-0 bg-gradient-to-t from-black via-black/30 to-transparent pointer-events-none" />
+                
+                <div className="absolute inset-0 p-8 flex flex-col justify-end pointer-events-none">
                   <div className="flex items-center gap-2 mb-3">
                     <Sparkles size={14} className="text-blue-400" />
-                    <span className="text-[10px] font-bold tracking-[0.2em] uppercase text-white/60">Featured</span>
+                    <span className="text-[10px] font-bold tracking-[0.2em] uppercase text-white/60">Featured Drop</span>
                   </div>
-                  <h2 className="text-3xl sm:text-5xl font-black mb-1 tracking-tighter">{latestTrack.title}</h2>
-                  <p className="text-white/50 font-bold text-lg mb-6">{latestTrack.artist}</p>
+                  <h2 className="text-3xl sm:text-5xl font-black mb-1 tracking-tighter leading-none">{latestTrack.title}</h2>
+                  <p className="text-white/40 font-bold text-lg mb-6">{latestTrack.artist}</p>
                   
-                  <button className="flex items-center gap-3 bg-white text-black px-6 py-3 rounded-full font-black text-xs uppercase tracking-widest hover:bg-blue-500 hover:text-white transition-colors active:scale-95 w-fit">
+                  <button className="pointer-events-auto flex items-center gap-3 bg-white text-black px-7 py-3 rounded-full font-black text-xs uppercase tracking-widest hover:bg-blue-500 hover:text-white transition-all active:scale-95 w-fit shadow-xl">
                     <Play size={16} fill="currentColor" /> Play Now
                   </button>
                 </div>
               </motion.div>
+            ) : (
+              <div className="aspect-[21/7] bg-white/5 rounded-[32px] flex items-center justify-center border border-white/5">
+                <ListMusic className="text-white/10" size={40} />
+              </div>
             )}
           </AnimatePresence>
         </section>
 
-        {/* SEARCH - Fast input response */}
+        {/* SEARCH AREA - Non-blocking UI */}
         <div className="px-6 mt-10 max-w-5xl mx-auto">
           <div className="relative group">
-            <Search className="absolute left-5 top-1/2 -translate-y-1/2 text-white/20 group-focus-within:text-blue-500 transition-colors" size={20} />
+            <Search className="absolute left-5 top-1/2 -translate-y-1/2 text-white/20 group-focus-within:text-blue-500 transition-colors pointer-events-none" size={20} />
             <input 
               type="text" 
-              placeholder="Search tracks, artists..."
-              className="w-full h-14 bg-white/5 rounded-2xl pl-14 pr-6 border border-white/5 outline-none focus:bg-white/10 focus:border-white/10 transition-all text-sm"
+              placeholder="Search the MS Metaverse..."
+              className="w-full h-14 bg-white/[0.03] rounded-2xl pl-14 pr-6 border border-white/5 outline-none focus:bg-white/[0.08] focus:border-blue-500/30 transition-all text-sm font-medium placeholder:text-white/20"
             />
           </div>
         </div>
 
-        {/* TRENDING - Smooth horizontal scroll */}
+        {/* TRENDING SECTION - Horizontal Scroll Optimization */}
         <section className="mt-12">
           <div className="px-6 mb-6 flex items-center justify-between max-w-5xl mx-auto">
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-2 select-none">
               <TrendingUp size={20} className="text-blue-500" />
-              <h3 className="text-xl font-black uppercase tracking-tighter">Trending</h3>
+              <h3 className="text-xl font-black uppercase tracking-tighter">Trending Now</h3>
             </div>
-            <button onClick={onSeeAll} className="text-[10px] font-black uppercase tracking-widest text-white/40 hover:text-white">View All</button>
+            <button onClick={onSeeAll} className="text-[10px] font-black uppercase tracking-widest text-white/40 hover:text-white transition-colors py-2 px-4 bg-white/5 rounded-lg active:scale-95">View All</button>
           </div>
           
-          <div className="flex gap-5 overflow-x-auto px-6 pb-4 no-scrollbar snap-x touch-pan-x">
-            {tracks.map((track, idx) => (
-              <div key={track.id} className="snap-start shrink-0">
-                <MusicCard 
-                  track={track} 
-                  index={idx} 
-                  onClick={() => onSelectTrack(track)}
-                />
-              </div>
-            ))}
+          <div 
+            className="flex gap-5 overflow-x-auto px-6 pb-6 no-scrollbar snap-x touch-pan-x"
+            style={{ WebkitOverflowScrolling: 'touch' }}
+          >
+            {tracks.length > 0 ? (
+              tracks.map((track, idx) => (
+                <div key={track.id} className="snap-start shrink-0 will-change-transform">
+                  <MusicCard 
+                    track={track} 
+                    index={idx} 
+                    onClick={() => onSelectTrack(track)}
+                  />
+                </div>
+              ))
+            ) : (
+              <div className="w-full text-center py-10 text-white/10 uppercase font-black text-xs tracking-[0.2em]">Syncing...</div>
+            )}
           </div>
         </section>
 
-        {/* DISCOVER - Quick tap response */}
-        <section className="mt-8 px-6 mb-32 max-w-5xl mx-auto">
-          <h3 className="text-xl font-black uppercase tracking-tighter mb-6">Discover</h3>
+        {/* DISCOVER GRID - High Response Tap */}
+        <section className="mt-6 px-6 mb-32 max-w-5xl mx-auto">
+          <h3 className="text-xl font-black uppercase tracking-tighter mb-6 select-none">Discover</h3>
           <div className="grid grid-cols-2 gap-4">
-            <DiscoverCard title="TOP CHARTS" color="from-blue-600/20" icon={<Play size={20} />} onClick={onSeeAll} />
-            <DiscoverCard title="NEW DROPS" color="from-purple-600/20" icon={<Sparkles size={20} />} onClick={onSeeAll} />
+            <DiscoverCard title="TOP CHARTS" color="from-blue-600/30" icon={<Play size={20} />} onClick={onSeeAll} />
+            <DiscoverCard title="NEW DROPS" color="from-purple-600/30" icon={<Sparkles size={20} />} onClick={onSeeAll} />
           </div>
         </section>
       </main>
@@ -140,16 +162,16 @@ const HomeScreen: React.FC<Props> = ({ tracks, user, onSelectTrack, onNavigatePr
   );
 };
 
-// Memoized Discover Card for zero re-render lag
+// Memoized Discover Card for zero-lag interaction
 const DiscoverCard = memo(({ title, color, icon, onClick }: { title: string, color: string, icon: any, onClick: () => void }) => (
   <motion.div
     whileTap={{ scale: 0.96 }}
     onClick={onClick}
-    className={`relative h-32 rounded-3xl p-5 overflow-hidden cursor-pointer border border-white/5 bg-white/[0.03] group`}
+    className={`relative h-32 rounded-3xl p-5 overflow-hidden cursor-pointer border border-white/5 bg-white/[0.02] group will-change-transform shadow-lg`}
   >
-    <div className={`absolute inset-0 bg-gradient-to-br ${color} to-transparent opacity-50 group-hover:opacity-80 transition-opacity`} />
-    <div className="relative z-10 h-full flex flex-col justify-between">
-      <div className="w-10 h-10 rounded-xl bg-white/10 flex items-center justify-center border border-white/10">
+    <div className={`absolute inset-0 bg-gradient-to-br ${color} to-transparent opacity-40 group-hover:opacity-70 transition-opacity pointer-events-none`} />
+    <div className="relative z-10 h-full flex flex-col justify-between pointer-events-none">
+      <div className="w-10 h-10 rounded-xl bg-white/5 backdrop-blur-md flex items-center justify-center border border-white/10 shadow-inner">
         {icon}
       </div>
       <h4 className="font-black text-sm tracking-tighter uppercase">{title}</h4>
