@@ -1,7 +1,18 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { MoreVertical, ChevronLeft } from 'lucide-react';
-import { doc, onSnapshot, collection, query, orderBy, addDoc, updateDoc, setDoc, getDoc, deleteDoc } from 'firebase/firestore';
+import {
+  doc,
+  onSnapshot,
+  collection,
+  query,
+  orderBy,
+  addDoc,
+  updateDoc,
+  setDoc,
+  getDoc,
+  deleteDoc
+} from 'firebase/firestore';
 import { db, auth } from '../firebase';
 import { MS_GROUP } from '../constants';
 import { Message, Group, Track } from '../types';
@@ -31,6 +42,8 @@ const ChatScreen: React.FC<Props> = ({
   onSelectTrack
 }) => {
 
+  /* ================= STATE ================= */
+
   const [messages, setMessages] = useState<Message[]>([]);
   const [optimisticMessages, setOptimisticMessages] = useState<Message[]>([]);
   const [groupData, setGroupData] = useState<Group>(MS_GROUP);
@@ -49,7 +62,8 @@ const ChatScreen: React.FC<Props> = ({
   const [viewerItems, setViewerItems] = useState<{ url: string; type: 'image' | 'video' }[]>([]);
   const [viewerIndex, setViewerIndex] = useState(0);
 
-  /* ---------------- GROUP SUB ---------------- */
+  /* ================= GROUP SUB ================= */
+
   useEffect(() => {
     const groupRef = doc(db, 'groups', GROUP_ID);
 
@@ -58,18 +72,22 @@ const ChatScreen: React.FC<Props> = ({
     });
 
     const unsubscribe = onSnapshot(groupRef, (docSnap) => {
-      if (docSnap.exists()) setGroupData(docSnap.data() as Group);
+      if (docSnap.exists()) {
+        setGroupData(docSnap.data() as Group);
+      }
     });
 
     return () => unsubscribe();
   }, []);
 
-  /* ---------------- TYPING ---------------- */
+  /* ================= TYPING SUB ================= */
+
   useEffect(() => {
     const typingRef = collection(db, 'groups', GROUP_ID, 'typing');
 
     const unsubscribe = onSnapshot(typingRef, (snapshot) => {
       const now = Date.now();
+
       const users = snapshot.docs
         .map(doc => ({ id: doc.id, ...doc.data() } as any))
         .filter(user =>
@@ -93,7 +111,8 @@ const ChatScreen: React.FC<Props> = ({
     };
   }, []);
 
-  /* ---------------- MEMBER COUNT ---------------- */
+  /* ================= MEMBER COUNT ================= */
+
   useEffect(() => {
     const unsubscribe = onSnapshot(collection(db, 'users'), (snapshot) => {
       setMemberCount(snapshot.size);
@@ -102,7 +121,8 @@ const ChatScreen: React.FC<Props> = ({
     return () => unsubscribe();
   }, []);
 
-  /* ---------------- MESSAGE SUB ---------------- */
+  /* ================= MESSAGE SUB ================= */
+
   useEffect(() => {
     const messagesRef = collection(db, 'groups', GROUP_ID, 'messages');
     const q = query(messagesRef, orderBy('timestamp', 'asc'));
@@ -123,22 +143,25 @@ const ChatScreen: React.FC<Props> = ({
     return () => unsubscribe();
   }, []);
 
-  /* ---------------- SMART AUTO SCROLL ---------------- */
+  /* ================= SMART AUTO SCROLL ================= */
+
   useEffect(() => {
     const el = scrollRef.current;
     if (!el) return;
 
     const isNearBottom =
-      el.scrollHeight - el.scrollTop - el.clientHeight < 150;
+      el.scrollHeight - el.scrollTop - el.clientHeight < 120;
 
     if (isNearBottom) {
       el.scrollTop = el.scrollHeight;
     }
   }, [messages.length, optimisticMessages.length]);
 
-  /* ---------------- MEMO MESSAGES ---------------- */
+  /* ================= MEMOIZED MERGE ================= */
+
   const combinedMessages = useMemo(() => {
     if (optimisticMessages.length === 0) return messages;
+
     return [...messages, ...optimisticMessages]
       .sort((a, b) => a.timestamp - b.timestamp);
   }, [messages, optimisticMessages]);
@@ -146,9 +169,7 @@ const ChatScreen: React.FC<Props> = ({
   const headerStickyTop = hasPlayer ? 'top-[72px]' : 'top-0';
   const mainContentPadding = hasPlayer ? 'pt-[144px]' : 'pt-[72px]';
 
-  /* ================================================== */
-  /* ==================== UI ========================== */
-  /* ================================================== */
+  /* ================= UI ================= */
 
   return (
     <div
@@ -159,7 +180,7 @@ const ChatScreen: React.FC<Props> = ({
       {/* HEADER */}
       <header
         className={`fixed left-0 right-0 h-[72px] z-[90] bg-black/70 border-b border-white/5 flex items-center justify-between px-6 backdrop-blur-md ${headerStickyTop}`}
-        style={{ transform: 'translateZ(0)', willChange: 'transform' }}
+        style={{ willChange: 'transform', transform: 'translateZ(0)' }}
       >
         <div className="flex items-center gap-4">
           <button
@@ -178,8 +199,10 @@ const ChatScreen: React.FC<Props> = ({
                 src={groupData.photo}
                 alt={groupData.name}
                 className="w-full h-full object-cover"
+                loading="lazy"
               />
             </div>
+
             <div>
               <h2 className="text-sm font-black uppercase tracking-tight">
                 {groupData.name}
@@ -206,8 +229,7 @@ const ChatScreen: React.FC<Props> = ({
         style={{
           overflowAnchor: 'none',
           WebkitOverflowScrolling: 'touch',
-          transform: 'translateZ(0)',
-          willChange: 'transform'
+          transform: 'translateZ(0)'
         }}
       >
         <div className="pt-4" />
@@ -232,16 +254,22 @@ const ChatScreen: React.FC<Props> = ({
       >
         <AnimatePresence>
           {typingUsers.length > 0 && (
-            <div className="px-6 w-full max-w-4xl flex justify-start mb-1">
+            <motion.div
+              initial={{ opacity: 0, y: 4 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: 4 }}
+              transition={{ duration: 0.18 }}
+              className="px-6 w-full max-w-4xl flex justify-start mb-1"
+            >
               <TypingIndicator users={typingUsers} />
-            </div>
+            </motion.div>
           )}
         </AnimatePresence>
 
         <ChatInput
-          onSend={() => {}}
-          onSendMedia={() => {}}
-          onSendTrack={() => {}}
+          onSend={async () => {}}
+          onSendMedia={async () => {}}
+          onSendTrack={async () => {}}
           libraryTracks={tracks}
           replyingTo={replyingTo}
           onCancelReply={() => setReplyingTo(null)}
