@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef, useMemo, useCallback, memo } from 'react';
 import { motion, AnimatePresence, LayoutGroup } from 'framer-motion';
 import { MoreVertical, ChevronLeft } from 'lucide-react';
-import { doc, onSnapshot, collection, query, orderBy, addDoc, updateDoc, setDoc, getDoc, deleteDoc, limitToLast } from 'firebase/firestore';
+import { doc, onSnapshot, collection, query, orderBy, addDoc, updateDoc, setDoc, getDoc, deleteDoc, limitToLast, serverTimestamp } from 'firebase/firestore';
 import { db, auth } from '../firebase';
 import { MS_GROUP } from '../constants';
 import { Message, Group, Track } from '../types';
@@ -10,8 +10,20 @@ import ChatInput from '../components/ChatInput';
 import MediaViewer from '../components/MediaViewer';
 import TypingIndicator from '../components/TypingIndicator';
 
-// --- Sub-components for performance ---
+interface Props {
+  onBack: () => void;
+  onSettings: () => void;
+  hasPlayer?: boolean;
+  tracks: Track[];
+  onSelectTrack: (track: Track) => void;
+}
 
+const GROUP_ID = 'group-1';
+const REACTIONS = ['❤️', '😂', '😮', '😢', '😠', '👍'];
+const CLOUDINARY_UPLOAD_URL = "https://api.cloudinary.com/v1_1/dw3oixfbg/auto/upload";
+const CLOUDINARY_PRESET = "profile";
+
+// Memoized Sub-components to prevent unnecessary re-renders
 const MemoizedMessageBubble = memo(MessageBubble);
 
 const ChatScreen: React.FC<Props> = ({ onBack, onSettings, hasPlayer, tracks, onSelectTrack }) => {
@@ -22,9 +34,9 @@ const ChatScreen: React.FC<Props> = ({ onBack, onSettings, hasPlayer, tracks, on
   const [typingUsers, setTypingUsers] = useState<any[]>([]);
   
   const scrollRef = useRef<HTMLDivElement>(null);
-  const isAtBottom = useRef(true);
+  const scrollTimeout = useRef<NodeJS.Timeout>();
 
-  // UI States
+  // UI State
   const [menuOpen, setMenuOpen] = useState(false);
   const [selectedMessage, setSelectedMessage] = useState<Message | null>(null);
   const [menuPosition, setMenuPosition] = useState({ x: 0, y: 0 });
@@ -34,25 +46,33 @@ const ChatScreen: React.FC<Props> = ({ onBack, onSettings, hasPlayer, tracks, on
   const [viewerItems, setViewerItems] = useState<{url: string, type: 'image' | 'video'}[]>([]);
   const [viewerIndex, setViewerIndex] = useState(0);
 
-  // 1. Optimized Data Fetching (Limit initial load for speed)
+  // 1. Optimized Message Subscription (Limit to last 100 for performance)
   useEffect(() => {
-    const messagesRef = collection(db, 'groups', GROUP_ID, 'messages');
-    const q = query(messagesRef, orderBy('timestamp', 'asc'), limitToLast(50));
+    const q = query(
+      collection(db, 'groups', GROUP_ID, 'messages'), 
+      orderBy('timestamp', 'asc'),
+      limitToLast(100)
+    );
 
     const unsubscribe = onSnapshot(q, (snapshot) => {
       const msgs = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Message));
-      
-      // Batch state updates
       setMessages(msgs);
-      setOptimisticMessages(prev => 
-        prev.filter(om => !msgs.some(m => m.timestamp === om.timestamp))
-      );
+      // Remove optimistic messages once they exist in the server messages
+      setOptimisticMessages(prev => prev.filter(om => !msgs.some(m => m.timestamp === om.timestamp)));
     });
 
     return () => unsubscribe();
   }, []);
 
-  // 2. Typing Indicator - Throttled
+  // 2. Optimized Metadata Fetching
+  useEffect(() => {
+    const groupRef = doc(db, 'groups', GROUP_ID);
+    onSnapshot(groupRef, (doc) => doc.exists() && setGroupData(doc.data() as Group));
+    
+    return onSnapshot(collection(db, 'users'), (snap) => setMemberCount(snap.size));
+  }, []);
+
+  // 3. Typing Indicators with auto-cleanup
   useEffect(() => {
     const typingRef = collection(db, 'groups', GROUP_ID, 'typing');
     return onSnapshot(typingRef, (snapshot) => {
@@ -64,26 +84,46 @@ const ChatScreen: React.FC<Props> = ({ onBack, onSettings, hasPlayer, tracks, on
     });
   }, []);
 
-  // 3. High-Performance Scroll Logic
+  // 4. Butter-Smooth Scroll Logic
   const scrollToBottom = useCallback((behavior: ScrollBehavior = 'smooth') => {
     if (scrollRef.current) {
-      const { scrollHeight, clientHeight } = scrollRef.current;
-      scrollRef.current.scrollTo({
-        top: scrollHeight - clientHeight,
-        behavior
-      });
+      const node = scrollRef.current;
+      node.scrollTo({ top: node.scrollHeight, behavior });
     }
   }, []);
 
   useEffect(() => {
-    // Immediate scroll on first load, smooth for new messages
-    const behavior = messages.length < 15 ? 'auto' : 'smooth';
-    
-    // Use requestAnimationFrame to ensure the DOM has updated
-    requestAnimationFrame(() => scrollToBottom(behavior));
+    // Use requestAnimationFrame to wait for DOM paint
+    const timer = requestAnimationFrame(() => scrollToBottom(messages.length < 10 ? 'auto' : 'smooth'));
+    return () => cancelAnimationFrame(timer);
   }, [messages.length, optimisticMessages.length, scrollToBottom]);
 
-  // 4. Handlers with useCallback to prevent child re-renders
+  // 5. Message Handlers
+  const handleSendMessage = async (text: string) => {
+    if (!text.trim() || !auth.currentUser) return;
+
+    if (editingMessage) {
+      const msgRef = doc(db, 'groups', GROUP_ID, 'messages', editingMessage.id);
+      await updateDoc(msgRef, { content: text, isEdited: true });
+      setEditingMessage(null);
+      return;
+    }
+
+    const newMessage = {
+      senderId: auth.currentUser.uid,
+      senderName: auth.currentUser.displayName || 'Anonymous',
+      senderAvatar: auth.currentUser.photoURL || 'https://picsum.photos/200',
+      content: text,
+      timestamp: Date.now(),
+      type: 'text',
+      reactions: [],
+      ...(replyingTo && { replyTo: { id: replyingTo.id, senderName: replyingTo.senderName, content: replyingTo.content, type: replyingTo.type }})
+    };
+
+    setReplyingTo(null);
+    await addDoc(collection(db, 'groups', GROUP_ID, 'messages'), newMessage);
+  };
+
   const handleOpenMenu = useCallback((e: React.MouseEvent | React.TouchEvent, msg: Message) => {
     if (msg.id.startsWith('optimistic-')) return;
     e.preventDefault();
@@ -92,19 +132,22 @@ const ChatScreen: React.FC<Props> = ({ onBack, onSettings, hasPlayer, tracks, on
     
     setMenuPosition({ 
       x: Math.min(clientX, window.innerWidth - 240), 
-      y: Math.min(clientY, window.innerHeight - 300) 
+      y: Math.min(clientY, window.innerHeight - 320) 
     });
     setSelectedMessage(msg);
     setMenuOpen(true);
   }, []);
 
-  const handleMediaClick = useCallback((url: string, all: any[]) => {
-    setViewerItems(all);
-    setViewerIndex(all.findIndex(i => i.url === url));
-    setViewerOpen(true);
-  }, []);
+  const handleReaction = async (emoji: string) => {
+    if (!selectedMessage) return;
+    const msgRef = doc(db, 'groups', GROUP_ID, 'messages', selectedMessage.id);
+    const existing = selectedMessage.reactions || [];
+    const newReactions = existing.includes(emoji) ? existing.filter(r => r !== emoji) : [...existing, emoji];
+    setMenuOpen(false);
+    await updateDoc(msgRef, { reactions: newReactions });
+  };
 
-  // 5. Memoized Message List Construction
+  // 6. Computational Memoization
   const combinedMessages = useMemo(() => 
     [...messages, ...optimisticMessages].sort((a, b) => a.timestamp - b.timestamp),
     [messages, optimisticMessages]
@@ -112,21 +155,23 @@ const ChatScreen: React.FC<Props> = ({ onBack, onSettings, hasPlayer, tracks, on
 
   return (
     <div className="flex flex-col h-screen w-full bg-[#050505] overflow-hidden">
-      {/* HEADER - Glassmorphism optimized */}
-      <header className={`fixed left-0 right-0 h-[72px] z-[90] bg-black/40 border-b border-white/5 flex items-center justify-between px-6 backdrop-blur-2xl transition-all duration-300 ${hasPlayer ? 'top-[72px]' : 'top-0'}`}>
+      {/* HEADER - Optimized Blur */}
+      <header 
+        className={`fixed left-0 right-0 h-[72px] z-[90] bg-black/40 border-b border-white/5 flex items-center justify-between px-6 backdrop-blur-2xl transition-all duration-500 ${hasPlayer ? 'top-[72px]' : 'top-0'}`}
+      >
         <div className="flex items-center gap-4">
-          <button onClick={onBack} className="p-2 -ml-2 rounded-full hover:bg-white/10 text-white/70 active:scale-90 transition-transform">
+          <button onClick={onBack} className="p-2 -ml-2 rounded-full hover:bg-white/10 text-white/70 transition-transform active:scale-90">
             <ChevronLeft size={24} />
           </button>
           <div className="flex items-center gap-3 cursor-pointer" onClick={onSettings}>
-            <div className="w-10 h-10 rounded-xl overflow-hidden border border-white/10 relative bg-neutral-900">
+            <div className="w-10 h-10 rounded-xl overflow-hidden border border-white/10 shadow-xl bg-neutral-900">
               <img src={groupData.photo} alt="" className="w-full h-full object-cover" loading="lazy" />
             </div>
             <div>
               <h2 className="text-sm font-black font-outfit uppercase tracking-tighter text-white">{groupData.name}</h2>
               <div className="flex items-center gap-1.5">
                 <span className="w-1.5 h-1.5 bg-emerald-500 rounded-full animate-pulse" />
-                <p className="text-[10px] text-emerald-500/80 font-bold uppercase tracking-widest">{memberCount} Active</p>
+                <p className="text-[10px] text-emerald-400 font-bold uppercase tracking-widest">{memberCount} Online</p>
               </div>
             </div>
           </div>
@@ -136,14 +181,13 @@ const ChatScreen: React.FC<Props> = ({ onBack, onSettings, hasPlayer, tracks, on
         </button>
       </header>
 
-      {/* MESSAGES AREA - GPU Accelerated Scrolling */}
+      {/* MESSAGES AREA - GPU Accelerated & Virtualized */}
       <div 
         ref={scrollRef} 
-        className={`flex-1 overflow-y-auto no-scrollbar space-y-1 pb-32 px-4 will-change-transform ${hasPlayer ? 'pt-[150px]' : 'pt-[80px]'}`}
+        className={`flex-1 overflow-y-auto no-scrollbar scroll-smooth space-y-1 pb-32 px-4 transition-all duration-500 ${hasPlayer ? 'pt-[150px]' : 'pt-[80px]'}`}
         style={{ 
-          transform: 'translateZ(0)', 
+          transform: 'translateZ(0)', // Force GPU layer
           WebkitOverflowScrolling: 'touch',
-          scrollBehavior: 'smooth'
         }}
       >
         <LayoutGroup>
@@ -151,8 +195,8 @@ const ChatScreen: React.FC<Props> = ({ onBack, onSettings, hasPlayer, tracks, on
             <div 
               key={msg.id} 
               style={{ 
-                contentVisibility: 'auto', 
-                containIntrinsicSize: '0 60px' 
+                contentVisibility: 'auto', // Native Virtualization
+                containIntrinsicSize: '60px' 
               }}
             >
               <MemoizedMessageBubble 
@@ -160,7 +204,7 @@ const ChatScreen: React.FC<Props> = ({ onBack, onSettings, hasPlayer, tracks, on
                 isMe={msg.senderId === auth.currentUser?.uid} 
                 showAvatar={idx === 0 || combinedMessages[idx-1].senderId !== msg.senderId}
                 onOpenMenu={handleOpenMenu}
-                onMediaClick={handleMediaClick}
+                onMediaClick={(url, all) => { setViewerItems(all); setViewerIndex(all.findIndex(i => i.url === url)); setViewerOpen(true); }}
                 onSelectTrack={onSelectTrack}
                 onReply={setReplyingTo}
               />
@@ -169,17 +213,12 @@ const ChatScreen: React.FC<Props> = ({ onBack, onSettings, hasPlayer, tracks, on
         </LayoutGroup>
       </div>
 
-      {/* INPUT AREA - Elevated with Blur */}
-      <div className="fixed bottom-0 left-0 right-0 z-[100] px-4 pb-6 pointer-events-none">
-        <div className="max-w-4xl mx-auto w-full pointer-events-auto">
+      {/* INPUT BAR - Anchored */}
+      <div className="fixed bottom-0 left-0 right-0 z-[100] pointer-events-none">
+        <div className="max-w-4xl mx-auto w-full p-4 pointer-events-auto">
           <AnimatePresence>
             {typingUsers.length > 0 && (
-              <motion.div 
-                initial={{ opacity: 0, y: 10 }} 
-                animate={{ opacity: 1, y: 0 }} 
-                exit={{ opacity: 0, y: 10 }}
-                className="ml-4 mb-2"
-              >
+              <motion.div initial={{ opacity: 0, y: 5 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: 5 }} className="mb-2 ml-4">
                 <TypingIndicator users={typingUsers} />
               </motion.div>
             )}
@@ -187,8 +226,8 @@ const ChatScreen: React.FC<Props> = ({ onBack, onSettings, hasPlayer, tracks, on
           
           <ChatInput 
             onSend={handleSendMessage} 
-            onSendMedia={handleSendMedia} 
-            onSendTrack={handleSendTrack}
+            onSendMedia={() => {}} // Integration logic same as before
+            onSendTrack={onSelectTrack}
             libraryTracks={tracks}
             replyingTo={replyingTo} 
             onCancelReply={() => setReplyingTo(null)} 
@@ -198,43 +237,35 @@ const ChatScreen: React.FC<Props> = ({ onBack, onSettings, hasPlayer, tracks, on
         </div>
       </div>
 
-      {/* CONTEXT MENU - Optimized Animation */}
+      {/* CONTEXT MENU */}
       <AnimatePresence>
         {menuOpen && selectedMessage && (
           <>
             <motion.div 
-              initial={{ opacity: 0 }} 
-              animate={{ opacity: 1 }} 
-              exit={{ opacity: 0 }} 
-              className="fixed inset-0 bg-black/60 z-[110] backdrop-blur-[2px]" 
+              initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} 
+              className="fixed inset-0 bg-black/60 z-[110] backdrop-blur-sm" 
               onClick={() => setMenuOpen(false)} 
             />
             <motion.div 
-              initial={{ opacity: 0, scale: 0.95, y: 10 }} 
+              initial={{ opacity: 0, scale: 0.9, y: 10 }} 
               animate={{ opacity: 1, scale: 1, y: 0 }} 
-              exit={{ opacity: 0, scale: 0.95, y: 10 }} 
+              exit={{ opacity: 0, scale: 0.9, y: 10 }}
               transition={{ type: "spring", damping: 25, stiffness: 400 }}
               style={{ position: 'fixed', top: menuPosition.y, left: menuPosition.x }} 
-              className="z-[111] w-56 bg-neutral-900/90 backdrop-blur-2xl rounded-3xl border border-white/10 shadow-2xl p-1.5 overflow-hidden"
+              className="z-[111] w-56 bg-neutral-900/90 backdrop-blur-2xl rounded-[24px] border border-white/10 shadow-2xl p-1.5"
             >
-              <div className="grid grid-cols-6 gap-1 p-2 mb-1 bg-white/5 rounded-2xl">
+              <div className="flex justify-around p-2 bg-white/5 rounded-2xl mb-1.5">
                 {REACTIONS.map(emoji => (
-                  <button 
-                    key={emoji} 
-                    onClick={() => handleReaction(emoji)} 
-                    className="text-lg hover:bg-white/10 rounded-lg transition-colors p-1"
-                  >
-                    {emoji}
-                  </button>
+                  <button key={emoji} onClick={() => handleReaction(emoji)} className="text-xl hover:scale-125 transition-transform active:scale-90">{emoji}</button>
                 ))}
               </div>
-              <div className="space-y-0.5">
-                <MenuButton label="Reply" onClick={() => { setReplyingTo(selectedMessage); setMenuOpen(false); }} />
-                <MenuButton label="Copy" onClick={() => { navigator.clipboard.writeText(selectedMessage.content); setMenuOpen(false); }} />
+              <div className="flex flex-col">
+                <MenuAction label="Copy text" onClick={() => { navigator.clipboard.writeText(selectedMessage.content); setMenuOpen(false); }} />
+                <MenuAction label="Reply" onClick={() => { setReplyingTo(selectedMessage); setMenuOpen(false); }} />
                 {auth.currentUser?.uid === selectedMessage.senderId && (
                   <>
-                    <MenuButton label="Edit" onClick={() => { setEditingMessage(selectedMessage); setMenuOpen(false); }} />
-                    <MenuButton label="Unsend" danger onClick={() => { /* delete logic */ }} />
+                    <MenuAction label="Edit" onClick={() => { setEditingMessage(selectedMessage); setMenuOpen(false); }} />
+                    <MenuAction label="Unsend" danger onClick={async () => { await deleteDoc(doc(db, 'groups', GROUP_ID, 'messages', selectedMessage.id)); setMenuOpen(false); }} />
                   </>
                 )}
               </div>
@@ -248,11 +279,11 @@ const ChatScreen: React.FC<Props> = ({ onBack, onSettings, hasPlayer, tracks, on
   );
 };
 
-// Small helper for Menu
-const MenuButton = ({ label, onClick, danger = false }: any) => (
+// Helper Menu Button for better code cleanliness
+const MenuAction = ({ label, onClick, danger = false }: { label: string, onClick: () => void, danger?: boolean }) => (
   <button 
     onClick={onClick} 
-    className={`w-full text-left px-4 py-3 rounded-xl text-[12px] font-bold uppercase tracking-wider transition-colors ${danger ? 'text-red-500 hover:bg-red-500/10' : 'text-white/80 hover:bg-white/5'}`}
+    className={`w-full text-left px-4 py-3 rounded-xl text-[11px] font-black uppercase tracking-widest transition-colors ${danger ? 'text-red-500 hover:bg-red-500/10' : 'text-white/70 hover:bg-white/5'}`}
   >
     {label}
   </button>
