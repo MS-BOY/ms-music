@@ -1,7 +1,6 @@
-
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { MoreVertical, ChevronLeft, Copy, Edit2, Trash2, X, Reply } from 'lucide-react';
+import { MoreVertical, ChevronLeft } from 'lucide-react';
 import { doc, onSnapshot, collection, query, orderBy, addDoc, updateDoc, setDoc, getDoc, deleteDoc } from 'firebase/firestore';
 import { db, auth } from '../firebase';
 import { MS_GROUP } from '../constants';
@@ -42,6 +41,7 @@ const ChatScreen: React.FC<Props> = ({ onBack, onSettings, hasPlayer, tracks, on
   const [viewerItems, setViewerItems] = useState<{url: string, type: 'image' | 'video'}[]>([]);
   const [viewerIndex, setViewerIndex] = useState(0);
 
+  // 1. Group Data Subscription
   useEffect(() => {
     const groupRef = doc(db, 'groups', GROUP_ID);
     getDoc(groupRef).then((snap) => {
@@ -54,7 +54,7 @@ const ChatScreen: React.FC<Props> = ({ onBack, onSettings, hasPlayer, tracks, on
     return () => unsubscribe();
   }, []);
 
-  // Listen for typing users
+  // 2. Typing Indicator Logic
   useEffect(() => {
     const typingRef = collection(db, 'groups', GROUP_ID, 'typing');
     const unsubscribe = onSnapshot(typingRef, (snapshot) => {
@@ -65,7 +65,6 @@ const ChatScreen: React.FC<Props> = ({ onBack, onSettings, hasPlayer, tracks, on
       setTypingUsers(users);
     });
     
-    // Periodically prune stale local state if the server doesn't update
     const interval = setInterval(() => {
       const now = Date.now();
       setTypingUsers(prev => prev.filter(user => (now - user.timestamp) < 5000));
@@ -77,6 +76,7 @@ const ChatScreen: React.FC<Props> = ({ onBack, onSettings, hasPlayer, tracks, on
     };
   }, []);
 
+  // 3. Member Count
   useEffect(() => {
     const unsubscribe = onSnapshot(collection(db, 'users'), (snapshot) => {
       setMemberCount(snapshot.size);
@@ -84,6 +84,7 @@ const ChatScreen: React.FC<Props> = ({ onBack, onSettings, hasPlayer, tracks, on
     return () => unsubscribe();
   }, []);
 
+  // 4. Messages Subscription (Optimized)
   useEffect(() => {
     const messagesRef = collection(db, 'groups', GROUP_ID, 'messages');
     const q = query(messagesRef, orderBy('timestamp', 'asc'));
@@ -100,9 +101,14 @@ const ChatScreen: React.FC<Props> = ({ onBack, onSettings, hasPlayer, tracks, on
     return () => unsubscribe();
   }, []);
 
+  // 5. Smooth Scroll Sync
   useEffect(() => {
     if (scrollRef.current) {
-      scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
+      // scrollHeight-এর পরিবর্তনের সাথে সাথে scroll পজিশন আপডেট
+      scrollRef.current.scrollTo({
+        top: scrollRef.current.scrollHeight,
+        behavior: messages.length < 5 ? 'auto' : 'smooth'
+      });
     }
   }, [messages.length, optimisticMessages.length]);
 
@@ -225,7 +231,16 @@ const ChatScreen: React.FC<Props> = ({ onBack, onSettings, hasPlayer, tracks, on
       timestamp: Date.now(),
       type: 'music',
       reactions: [],
+      ...(replyingTo ? {
+        replyTo: {
+          id: replyingTo.id,
+          senderName: replyingTo.senderName,
+          content: replyingTo.content,
+          type: replyingTo.type
+        }
+      } : {})
     };
+    setReplyingTo(null);
     await addDoc(collection(db, 'groups', GROUP_ID, 'messages'), newMessage);
   };
 
@@ -253,20 +268,25 @@ const ChatScreen: React.FC<Props> = ({ onBack, onSettings, hasPlayer, tracks, on
     setMenuOpen(false);
   };
 
+  // 6. Computational Optimizations
   const headerStickyTop = hasPlayer ? 'top-[72px]' : 'top-0';
   const mainContentPadding = hasPlayer ? 'pt-[144px]' : 'pt-[72px]';
 
-  const combinedMessages = [...messages, ...optimisticMessages].sort((a, b) => a.timestamp - b.timestamp);
+  const combinedMessages = useMemo(() => 
+    [...messages, ...optimisticMessages].sort((a, b) => a.timestamp - b.timestamp),
+    [messages, optimisticMessages]
+  );
 
   return (
-    <div className="flex flex-col h-screen w-full bg-[#050505] overflow-hidden">
-      <header className={`fixed left-0 right-0 h-[72px] z-[90] glass bg-black/60 border-b border-white/5 flex items-center justify-between px-6 backdrop-blur-[40px] transition-all duration-500 ${headerStickyTop}`}>
+    <div className="flex flex-col h-screen w-full bg-[#050505] overflow-hidden transform-gpu">
+      {/* HEADER - Optimized Blur */}
+      <header className={`fixed left-0 right-0 h-[72px] z-[90] bg-black/60 border-b border-white/5 flex items-center justify-between px-6 backdrop-blur-xl transition-all duration-500 ${headerStickyTop}`}>
         <div className="flex items-center gap-4">
-          <button onClick={onBack} className="p-2 -ml-2 rounded-full hover:bg-white/10 text-white/70 transition-colors">
+          <button onClick={onBack} className="p-2 -ml-2 rounded-full hover:bg-white/10 text-white/70 transition-colors active:scale-90">
             <ChevronLeft size={24} />
           </button>
           <div className="flex items-center gap-3 cursor-pointer" onClick={onSettings}>
-            <div className="w-10 h-10 rounded-xl overflow-hidden border border-white/10 shadow-lg relative">
+            <div className="w-10 h-10 rounded-xl overflow-hidden border border-white/10 shadow-lg relative bg-neutral-900">
               <img src={groupData.photo} alt={groupData.name} className="w-full h-full object-cover" />
               <div className="absolute bottom-0 right-0 w-2.5 h-2.5 bg-emerald-500 rounded-full border-2 border-[#050505]" />
             </div>
@@ -276,12 +296,17 @@ const ChatScreen: React.FC<Props> = ({ onBack, onSettings, hasPlayer, tracks, on
             </div>
           </div>
         </div>
-        <button onClick={onSettings} className="p-2 rounded-full hover:bg-white/10 text-white/40">
+        <button onClick={onSettings} className="p-2 rounded-full hover:bg-white/10 text-white/40 active:scale-90 transition-transform">
           <MoreVertical size={20} />
         </button>
       </header>
 
-      <div ref={scrollRef} className={`flex-1 overflow-y-auto no-scrollbar scroll-smooth space-y-6 pb-24 px-4 transition-all duration-500 ${mainContentPadding}`}>
+      {/* MESSAGES AREA - Optimized for Scrolling */}
+      <div 
+        ref={scrollRef} 
+        className={`flex-1 overflow-y-auto no-scrollbar scroll-smooth space-y-6 pb-28 px-4 transition-all duration-500 ${mainContentPadding}`}
+        style={{ overflowAnchor: 'auto', WebkitOverflowScrolling: 'touch' }}
+      >
         <div className="pt-4" />
         {combinedMessages.map((msg, idx) => (
           <MessageBubble 
@@ -292,15 +317,16 @@ const ChatScreen: React.FC<Props> = ({ onBack, onSettings, hasPlayer, tracks, on
             onOpenMenu={handleOpenMenu}
             onMediaClick={(url, all) => { setViewerItems(all); setViewerIndex(all.findIndex(i => i.url === url)); setViewerOpen(true); }}
             onSelectTrack={onSelectTrack}
+            onReply={(m) => setReplyingTo(m)}
           />
         ))}
       </div>
 
-      <div className="absolute bottom-0 left-0 right-0 z-20 bg-gradient-to-t from-black via-black/90 to-transparent flex flex-col items-center">
-        {/* Floating Typing Indicator */}
+      {/* INPUT BAR - GPU Accelerated */}
+      <div className="absolute bottom-0 left-0 right-0 z-20 bg-gradient-to-t from-black via-black/95 to-transparent flex flex-col items-center pb-2">
         <AnimatePresence>
           {typingUsers.length > 0 && (
-            <div className="px-6 w-full max-w-4xl flex justify-start">
+            <div className="px-6 w-full max-w-4xl flex justify-start mb-1">
               <TypingIndicator users={typingUsers} />
             </div>
           )}
@@ -318,23 +344,24 @@ const ChatScreen: React.FC<Props> = ({ onBack, onSettings, hasPlayer, tracks, on
         />
       </div>
 
+      {/* CONTEXT MENU */}
       <AnimatePresence>
         {menuOpen && selectedMessage && (
           <>
             <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="fixed inset-0 bg-black/40 z-[100] backdrop-blur-sm" onClick={() => setMenuOpen(false)} />
-            <motion.div initial={{ opacity: 0, scale: 0.9, y: 10 }} animate={{ opacity: 1, scale: 1, y: 0 }} exit={{ opacity: 0, scale: 0.9, y: 10 }} style={{ position: 'fixed', top: menuPosition.y, left: menuPosition.x }} className="z-[101] w-56 glass-high rounded-[28px] border border-white/10 shadow-2xl p-1.5 bg-[#0a0a0a]/95">
-              <div className="flex justify-around p-2 border-b border-white/5 mb-1">
+            <motion.div initial={{ opacity: 0, scale: 0.9, y: 10 }} animate={{ opacity: 1, scale: 1, y: 0 }} exit={{ opacity: 0, scale: 0.9, y: 10 }} style={{ position: 'fixed', top: menuPosition.y, left: menuPosition.x }} className="z-[101] w-56 bg-[#0a0a0a]/95 backdrop-blur-xl rounded-[28px] border border-white/10 shadow-2xl p-1.5">
+              <div className="flex justify-around p-2 border-b border-white/5 mb-1 bg-white/5 rounded-t-[24px]">
                 {REACTIONS.map(emoji => (
-                  <button key={emoji} onClick={() => handleReaction(emoji)} className="text-xl hover:scale-125 transition-transform p-1">{emoji}</button>
+                  <button key={emoji} onClick={() => handleReaction(emoji)} className="text-xl hover:scale-125 transition-transform active:scale-90 p-1">{emoji}</button>
                 ))}
               </div>
-              <button onClick={() => { navigator.clipboard.writeText(selectedMessage.content); setMenuOpen(false); }} className="w-full text-left px-4 py-3 hover:bg-white/5 rounded-2xl text-[13px] font-bold">Copy Message</button>
-              <button onClick={() => { setReplyingTo(selectedMessage); setMenuOpen(false); }} className="w-full text-left px-4 py-3 hover:bg-white/5 rounded-2xl text-[13px] font-bold">Reply</button>
+              <button onClick={() => { navigator.clipboard.writeText(selectedMessage.content); setMenuOpen(false); }} className="w-full text-left px-4 py-3 hover:bg-white/5 rounded-2xl text-[13px] font-bold tracking-tight uppercase">Copy Message</button>
+              <button onClick={() => { setReplyingTo(selectedMessage); setMenuOpen(false); }} className="w-full text-left px-4 py-3 hover:bg-white/5 rounded-2xl text-[13px] font-bold tracking-tight uppercase">Reply</button>
               {auth.currentUser?.uid === selectedMessage.senderId && selectedMessage.type === 'text' && (
-                <button onClick={() => { setEditingMessage(selectedMessage); setMenuOpen(false); }} className="w-full text-left px-4 py-3 hover:bg-white/5 rounded-2xl text-[13px] font-bold">Edit</button>
+                <button onClick={() => { setEditingMessage(selectedMessage); setMenuOpen(false); }} className="w-full text-left px-4 py-3 hover:bg-white/5 rounded-2xl text-[13px] font-bold tracking-tight uppercase">Edit</button>
               )}
               {auth.currentUser?.uid === selectedMessage.senderId && (
-                <button onClick={async () => { await deleteDoc(doc(db, 'groups', GROUP_ID, 'messages', selectedMessage.id)); setMenuOpen(false); }} className="w-full text-left px-4 py-3 hover:bg-red-500/10 rounded-2xl text-[13px] font-bold text-red-500">Unsend</button>
+                <button onClick={async () => { await deleteDoc(doc(db, 'groups', GROUP_ID, 'messages', selectedMessage.id)); setMenuOpen(false); }} className="w-full text-left px-4 py-3 hover:bg-red-500/10 rounded-2xl text-[13px] font-bold text-red-500 tracking-tight uppercase">Unsend</button>
               )}
             </motion.div>
           </>
