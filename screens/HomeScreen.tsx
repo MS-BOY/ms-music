@@ -1,4 +1,4 @@
-import React, { useMemo } from 'react';
+import React, { memo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Search, Bell, Play, ListMusic, TrendingUp, Sparkles } from 'lucide-react';
 import MusicCard from '../components/MusicCard';
@@ -13,177 +13,148 @@ interface Props {
   hasPlayer?: boolean;
 }
 
+// Optimization: Snappy spring transitions for "fast" feel
+const springConfig = { type: "spring", stiffness: 300, damping: 30 };
+
 const HomeScreen: React.FC<Props> = ({ tracks, user, onSelectTrack, onNavigateProfile, onSeeAll, hasPlayer }) => {
   const latestTrack = tracks.length > 0 ? tracks[0] : null;
 
-  // Optimization: Calculate these once to prevent layout thrashing
+  // Use simple pixel offsets for padding to avoid layout thrashing
   const headerStickyPos = hasPlayer ? 'top-[72px]' : 'top-0';
   const contentPadding = hasPlayer ? 'pt-[144px]' : 'pt-[72px]';
 
-  // Memoize static header to prevent re-renders
-  const header = useMemo(() => (
-    <header className={`fixed left-0 right-0 z-[90] h-[72px] px-6 flex items-center justify-between transition-transform duration-300 bg-black/60 backdrop-blur-md border-b border-white/5 ${headerStickyPos} will-change-transform`}>
-      <motion.div 
-        initial={{ x: -10, opacity: 0 }}
-        animate={{ x: 0, opacity: 1 }}
-        className="flex items-center gap-3"
-      >
-        <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-blue-600 to-indigo-600 flex items-center justify-center shadow-lg">
-          <span className="font-outfit font-black text-lg text-white">M</span>
-        </div>
-        <h1 className="text-lg font-black font-outfit tracking-tight uppercase text-white">MS MUSIC</h1>
-      </motion.div>
-      
-      <div className="flex items-center gap-2.5">
-        <button className="w-10 h-10 flex items-center justify-center bg-white/5 rounded-xl hover:bg-white/10 transition-colors">
-          <Search size={18} className="text-white/70" />
-        </button>
-        <button className="w-10 h-10 flex items-center justify-center bg-white/5 rounded-xl hover:bg-white/10 transition-all relative">
-          <Bell size={18} className="text-white/70" />
-          <span className="absolute top-2.5 right-2.5 w-1.5 h-1.5 bg-blue-500 rounded-full ring-2 ring-black" />
-        </button>
-        <button onClick={onNavigateProfile} className="w-9 h-9 rounded-xl overflow-hidden border border-white/10 bg-white/5 ml-1">
-          <img loading="lazy" src={user?.avatar || "https://picsum.photos/200"} alt="Avatar" className="w-full h-full object-cover" />
-        </button>
-      </div>
-    </header>
-  ), [user, onNavigateProfile, headerStickyPos]);
-
   return (
-    // REMOVED: transition-all duration-700 from the main container (Major lag cause during scroll)
-    <div className="flex flex-col h-full w-full pb-32 overflow-y-auto no-scrollbar scroll-smooth">
-      {header}
+    <div className="relative h-full w-full overflow-hidden bg-[#050505] text-white">
+      {/* FIXED HEADER - Optimized Blur */}
+      <header 
+        className={`fixed left-0 right-0 z-[100] h-[72px] px-6 flex items-center justify-between bg-black/60 backdrop-blur-lg border-b border-white/5 transition-all duration-300 ${headerStickyPos}`}
+        style={{ transform: 'translateZ(0)' }} // Force GPU layer
+      >
+        <div className="flex items-center gap-3">
+          <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-blue-600 to-indigo-600 flex items-center justify-center">
+            <span className="font-outfit font-black text-lg">M</span>
+          </div>
+          <h1 className="text-lg font-black font-outfit tracking-tighter uppercase">MS MUSIC</h1>
+        </div>
+        
+        <div className="flex items-center gap-3">
+          <button className="p-2 hover:bg-white/10 rounded-full transition-colors">
+            <Search size={20} className="text-white/70" />
+          </button>
+          <button className="p-2 hover:bg-white/10 rounded-full transition-colors relative">
+            <Bell size={20} className="text-white/70" />
+            <span className="absolute top-2 right-2 w-2 h-2 bg-blue-500 rounded-full border-2 border-black" />
+          </button>
+          <div 
+            onClick={onNavigateProfile}
+            className="w-9 h-9 rounded-full border border-white/20 overflow-hidden cursor-pointer ml-1 active:scale-90 transition-transform"
+          >
+            <img src={user?.avatar || "https://picsum.photos/200"} alt="User" className="w-full h-full object-cover" />
+          </div>
+        </div>
+      </header>
 
-      <div className={`${contentPadding} transform-gpu`}>
-        {/* Hero Showcase */}
-        <section className="px-6 pt-6 flex justify-center">
+      {/* SCROLLABLE AREA - Clean scrolling, no transitions on container */}
+      <main className={`h-full overflow-y-auto overflow-x-hidden no-scrollbar ${contentPadding} scroll-smooth transform-gpu`}>
+        
+        {/* HERO - Optimized for no-stutter */}
+        <section className="px-6 pt-4">
           <AnimatePresence mode="wait">
-            {latestTrack ? (
+            {latestTrack && (
               <motion.div 
-                key={latestTrack.id}
-                initial={{ opacity: 0, scale: 0.98 }}
-                animate={{ opacity: 1, scale: 1 }}
+                initial={{ opacity: 0, y: 10 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={springConfig}
                 onClick={() => onSelectTrack(latestTrack)}
-                className="relative overflow-hidden rounded-[44px] w-full max-w-4xl aspect-[21/9] sm:aspect-[16/7] group cursor-pointer shadow-2xl border border-white/10 will-change-transform bg-neutral-900"
+                className="relative aspect-[16/8] sm:aspect-[21/7] w-full max-w-5xl mx-auto rounded-[32px] overflow-hidden group cursor-pointer bg-neutral-900 shadow-2xl"
               >
-                {/* Background Image - Optimized transition */}
-                <motion.img 
+                <img 
                   src={latestTrack.albumArt} 
-                  alt={latestTrack.title} 
-                  className="absolute inset-0 w-full h-full object-cover opacity-60 transition-transform duration-[1.5s] ease-out group-hover:scale-105"
-                  loading="eager"
+                  alt="" 
+                  className="absolute inset-0 w-full h-full object-cover opacity-50 transition-transform duration-700 group-hover:scale-105"
                 />
+                <div className="absolute inset-0 bg-gradient-to-t from-black via-black/20 to-transparent" />
                 
-                <div className="absolute inset-0 bg-gradient-to-r from-black/90 via-black/40 to-transparent" />
-                
-                <div className="absolute inset-0 p-8 sm:p-12 flex flex-col justify-end">
-                  <motion.div 
-                    initial={{ opacity: 0 }}
-                    animate={{ opacity: 1 }}
-                    className="flex items-center gap-2.5 px-4 py-2 bg-white/10 backdrop-blur-md rounded-full border border-white/10 w-fit mb-4"
-                  >
-                    <Sparkles size={12} className="text-blue-400" />
-                    <span className="text-[9px] font-black tracking-[0.3em] text-white uppercase opacity-70">Featured Drop</span>
-                  </motion.div>
+                <div className="absolute inset-0 p-8 flex flex-col justify-end">
+                  <div className="flex items-center gap-2 mb-3">
+                    <Sparkles size={14} className="text-blue-400" />
+                    <span className="text-[10px] font-bold tracking-[0.2em] uppercase text-white/60">Featured</span>
+                  </div>
+                  <h2 className="text-3xl sm:text-5xl font-black mb-1 tracking-tighter">{latestTrack.title}</h2>
+                  <p className="text-white/50 font-bold text-lg mb-6">{latestTrack.artist}</p>
                   
-                  <h2 className="text-4xl sm:text-6xl font-black font-outfit mb-1 text-white leading-none tracking-tighter">
-                    {latestTrack.title}
-                  </h2>
-                  <p className="text-white/40 font-black text-xl mb-8 font-outfit tracking-tighter">
-                    {latestTrack.artist}
-                  </p>
-                  
-                  <button 
-                    onClick={(e) => { e.stopPropagation(); onSelectTrack(latestTrack); }}
-                    className="px-8 h-12 bg-white text-black hover:bg-blue-500 hover:text-white rounded-full font-black flex items-center gap-3 w-fit shadow-xl transition-all active:scale-95"
-                  >
-                    <Play size={18} fill="currentColor" />
-                    <span className="text-xs tracking-widest uppercase font-bold">Play Now</span>
+                  <button className="flex items-center gap-3 bg-white text-black px-6 py-3 rounded-full font-black text-xs uppercase tracking-widest hover:bg-blue-500 hover:text-white transition-colors active:scale-95 w-fit">
+                    <Play size={16} fill="currentColor" /> Play Now
                   </button>
                 </div>
               </motion.div>
-            ) : (
-               <div className="relative rounded-[44px] w-full max-w-4xl aspect-[21/9] bg-white/5 flex flex-col items-center justify-center border border-white/5">
-                  <ListMusic size={40} className="text-white/20 mb-4" />
-                  <h3 className="text-xl font-black text-white/40 uppercase tracking-widest">Awaiting Drop</h3>
-               </div>
             )}
           </AnimatePresence>
         </section>
 
-        {/* Search Bar */}
-        <div className="px-6 mt-10 max-w-4xl mx-auto w-full">
-          <div className="relative">
-            <Search className="absolute left-6 top-1/2 -translate-y-1/2 text-white/20" size={20} />
+        {/* SEARCH - Fast input response */}
+        <div className="px-6 mt-10 max-w-5xl mx-auto">
+          <div className="relative group">
+            <Search className="absolute left-5 top-1/2 -translate-y-1/2 text-white/20 group-focus-within:text-blue-500 transition-colors" size={20} />
             <input 
               type="text" 
-              placeholder="Search the MS Metaverse..."
-              className="w-full h-14 bg-white/[0.03] rounded-[24px] pl-14 pr-8 outline-none border border-white/5 focus:border-blue-500/50 transition-all text-sm font-semibold placeholder:text-white/10"
+              placeholder="Search tracks, artists..."
+              className="w-full h-14 bg-white/5 rounded-2xl pl-14 pr-6 border border-white/5 outline-none focus:bg-white/10 focus:border-white/10 transition-all text-sm"
             />
           </div>
         </div>
 
-        {/* Trending List */}
+        {/* TRENDING - Smooth horizontal scroll */}
         <section className="mt-12">
-          <div className="px-6 mb-8 flex items-center justify-between max-w-4xl mx-auto w-full">
-            <div className="flex items-center gap-3">
+          <div className="px-6 mb-6 flex items-center justify-between max-w-5xl mx-auto">
+            <div className="flex items-center gap-2">
               <TrendingUp size={20} className="text-blue-500" />
-              <h3 className="text-2xl font-black font-outfit tracking-tighter uppercase">Trending</h3>
+              <h3 className="text-xl font-black uppercase tracking-tighter">Trending</h3>
             </div>
-            <button onClick={onSeeAll} className="px-5 py-2 bg-white/5 rounded-xl text-[10px] font-black uppercase tracking-widest text-white/40 border border-white/10 hover:bg-white/10 transition-colors">View All</button>
+            <button onClick={onSeeAll} className="text-[10px] font-black uppercase tracking-widest text-white/40 hover:text-white">View All</button>
           </div>
           
-          {/* Optimization: uses transform-gpu for smoother horizontal scrolling */}
-          <div className="flex gap-6 overflow-x-auto px-6 pb-12 no-scrollbar snap-x snap-mandatory transform-gpu">
-            <div className="flex gap-6 mx-auto">
-              {tracks.length > 0 ? (
-                tracks.map((track, idx) => (
-                  <div key={track.id} className="snap-center will-change-contents">
-                    <MusicCard 
-                      track={track} 
-                      index={idx} 
-                      onClick={() => onSelectTrack(track)}
-                    />
-                  </div>
-                ))
-              ) : (
-                <div className="px-4 text-white/10 text-xs font-black uppercase tracking-widest italic py-20 w-full text-center">
-                  Syncing Frequency...
-                </div>
-              )}
-            </div>
+          <div className="flex gap-5 overflow-x-auto px-6 pb-4 no-scrollbar snap-x touch-pan-x">
+            {tracks.map((track, idx) => (
+              <div key={track.id} className="snap-start shrink-0">
+                <MusicCard 
+                  track={track} 
+                  index={idx} 
+                  onClick={() => onSelectTrack(track)}
+                />
+              </div>
+            ))}
           </div>
         </section>
 
-        {/* Discover Grid */}
-        <section className="mt-4 px-6 mb-20 max-w-4xl mx-auto w-full">
-          <h3 className="text-2xl font-black font-outfit mb-8 tracking-tighter uppercase">Discover</h3>
-          <div className="grid grid-cols-2 gap-6">
-            <DiscoverCard title="TOP CHARTS" color="from-indigo-600/20" icon={<Play size={20} />} onClick={onSeeAll} />
-            <DiscoverCard title="NEW DROPS" color="from-fuchsia-600/20" icon={<Sparkles size={20} />} onClick={onSeeAll} />
+        {/* DISCOVER - Quick tap response */}
+        <section className="mt-8 px-6 mb-32 max-w-5xl mx-auto">
+          <h3 className="text-xl font-black uppercase tracking-tighter mb-6">Discover</h3>
+          <div className="grid grid-cols-2 gap-4">
+            <DiscoverCard title="TOP CHARTS" color="from-blue-600/20" icon={<Play size={20} />} onClick={onSeeAll} />
+            <DiscoverCard title="NEW DROPS" color="from-purple-600/20" icon={<Sparkles size={20} />} onClick={onSeeAll} />
           </div>
         </section>
-      </div>
+      </main>
     </div>
   );
 };
 
-// Optimized DiscoverCard: Removed heavy filter effects on every frame
-const DiscoverCard: React.FC<{ title: string, color: string, icon: React.ReactNode, onClick: () => void }> = ({ title, color, icon, onClick }) => (
+// Memoized Discover Card for zero re-render lag
+const DiscoverCard = memo(({ title, color, icon, onClick }: { title: string, color: string, icon: any, onClick: () => void }) => (
   <motion.div
-    whileHover={{ y: -4 }}
-    whileTap={{ scale: 0.97 }}
+    whileTap={{ scale: 0.96 }}
     onClick={onClick}
-    className="bg-white/5 h-36 rounded-[32px] p-6 relative overflow-hidden group cursor-pointer border border-white/10 will-change-transform"
+    className={`relative h-32 rounded-3xl p-5 overflow-hidden cursor-pointer border border-white/5 bg-white/[0.03] group`}
   >
-    <div className={`absolute inset-0 bg-gradient-to-br ${color} to-transparent opacity-40 group-hover:opacity-60 transition-opacity`} />
-    <div className="relative z-10 flex flex-col h-full justify-between">
-      <div className="w-10 h-10 rounded-xl bg-white/10 backdrop-blur-md flex items-center justify-center text-white/80 border border-white/10">
+    <div className={`absolute inset-0 bg-gradient-to-br ${color} to-transparent opacity-50 group-hover:opacity-80 transition-opacity`} />
+    <div className="relative z-10 h-full flex flex-col justify-between">
+      <div className="w-10 h-10 rounded-xl bg-white/10 flex items-center justify-center border border-white/10">
         {icon}
       </div>
-      <h4 className="font-black text-lg font-outfit tracking-tighter uppercase text-white">{title}</h4>
+      <h4 className="font-black text-sm tracking-tighter uppercase">{title}</h4>
     </div>
   </motion.div>
-);
+));
 
 export default HomeScreen;
